@@ -1,12 +1,14 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { FleetController } from './adapters/http/fleet.controller';
+import { FleetHomeController } from './adapters/http/fleet-home.controller';
 import { FleetSimulatorService } from './adapters/simulation/fleet-simulator.service';
 import { ListBusesUseCase } from './application/use-cases/list-buses.use-case';
 import { GetBusDetailUseCase } from './application/use-cases/get-bus-detail.use-case';
 import { StartTripUseCase } from './application/use-cases/start-trip.use-case';
 import { UpdateBusPositionUseCase } from './application/use-cases/update-bus-position.use-case';
 import { FinishTripUseCase } from './application/use-cases/finish-trip.use-case';
+import { GetOperativeHomeUseCase } from './application/use-cases/get-operative-home.use-case';
 import { BUS_REPOSITORY } from './domain/ports/bus-repository.port';
 import { POSITION_PUBLISHER } from './domain/ports/position-publisher.port';
 import { PrismaBusRepository } from './infrastructure/prisma/bus.repository';
@@ -16,7 +18,7 @@ import { RedisPublisherProvider } from '../../shared/infrastructure/redis.provid
 
 @Module({
   imports: [ConfigModule],
-  controllers: [FleetController],
+  controllers: [FleetController, FleetHomeController],
   providers: [
     PrismaService,
     RedisPublisherProvider,
@@ -27,6 +29,7 @@ import { RedisPublisherProvider } from '../../shared/infrastructure/redis.provid
     StartTripUseCase,
     UpdateBusPositionUseCase,
     FinishTripUseCase,
+    GetOperativeHomeUseCase,
 
     // Adapter que simula el feed externo (ver adapters/simulation)
     FleetSimulatorService,

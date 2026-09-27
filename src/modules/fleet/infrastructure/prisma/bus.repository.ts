@@ -28,6 +28,11 @@ export class PrismaBusRepository implements BusRepositoryPort {
     return row ? this.toDomain(row) : null;
   }
 
+  async findByDriver(driver: string): Promise<Bus | null> {
+    const row = await this.prisma.bus.findFirst({ where: { driver } });
+    return row ? this.toDomain(row) : null;
+  }
+
   async save(bus: Bus): Promise<void> {
     const props = bus.toPersistence();
     await this.prisma.bus.update({

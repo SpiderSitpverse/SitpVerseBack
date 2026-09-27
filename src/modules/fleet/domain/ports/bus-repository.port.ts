@@ -10,6 +10,11 @@ export const BUS_REPOSITORY = Symbol('BUS_REPOSITORY');
 export interface BusRepositoryPort {
   findAll(filter?: { status?: BusStatus }): Promise<Bus[]>;
   findById(id: string): Promise<Bus | null>;
+  /**
+   * Sin Identity real, usamos el nombre del conductor como "identidad" temporal
+   * del usuario operativo (ver HU-96 / OPERATIVE_DEMO_DRIVER en .env).
+   */
+  findByDriver(driver: string): Promise<Bus | null>;
   save(bus: Bus): Promise<void>;
   appendPositionHistory(
     busId: string,
