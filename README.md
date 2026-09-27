@@ -68,19 +68,6 @@ Redis en el medio es lo que permite que, si más adelante corren varias instanci
 backend, todas se enteren del cambio y lo reenvíen a **sus propios** clientes
 conectados — no solo la instancia que recibió la actualización.
 
-## HUs cubiertas en este avance
-
-| HU | Descripción | Dónde vive |
-|---|---|---|
-| HU-12 | Visualizar ubicación de los buses | `ListBusesUseCase` + `GET /fleet/buses` |
-| HU-13 | Consultar info detallada de un bus | `GetBusDetailUseCase` + `GET /fleet/buses/:id` |
-| HU-14 | Filtrar buses por estado | `ListBusesUseCase` (query `?status=`) |
-| HU-49 | Reportar inicio de viaje + actualizar posición en tiempo real | `StartTripUseCase` + `UpdateBusPositionUseCase` |
-| HU-51 | Finalizar servicio/viaje del bus | `FinishTripUseCase` |
-
-Pendientes de esta épica: HU-09/10/11 (son de UI/rol, viven en el front), HU-46/47
-(ruta alternativa en el mapa — Feature 2.2, todavía no abordada).
-
 ## Endpoints REST
 
 ```
