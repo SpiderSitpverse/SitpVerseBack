@@ -5,7 +5,7 @@ asignación concurrente de ayuda (apoyo de conductores y reparación de buses).
 
 > La API real de TransMilenio aún no está conectada. Buses y usuarios se siembran, las posiciones las
 > genera un feed simulado y el usuario se identifica con el header `x-employee-id`. Todo está aislado para
-> reemplazarlo sin tocar la lógica de negocio (ver [Preparado para la API real](#preparado-para-la-api-real)).
+> reemplazarlo sin tocar la lógica de negocio.
 
 ---
 
@@ -139,21 +139,6 @@ aceptación** (libera el cupo) y **reenvía la alerta**. Los puntos se acreditan
 | `POST /assistance/calls/:id/complete` | ADMIN, mecánico | Cerrar y pagar puntos |
 | `GET /assistance/me` | todos | Perfil y puntos |
 
-### Tiempo real
-
-```js
-const socket = io("http://localhost:3000/realtime", {
-  auth: { employeeId: "2001", lastSeq: localStorage.lastSeq },
-});
-socket.on("assistance:event", (e) => { /* e.type, e.payload, e.eventId, e.seq */ });
-socket.on("fleet:position-updated", (bus) => { /* posición del bus */ });
-```
-
-Eventos de alerta: `incident.reported`, `call.opened`, `call.progress`, `call.closed`, `claim.cancelled`,
-`call.completed`. Cada rol recibe solo los suyos.
-
----
-
 ## Concurrencia
 
 ### El problema
@@ -215,56 +200,3 @@ cambio de estado + evento ──► Postgres (una transacción)
 El orden es el de llegada de la petición al lock en Redis, no el instante del clic en el teléfono: la red
 del cliente queda fuera del control del servidor. Dos peticiones con menos de ~10 ms de diferencia pueden
 salir en cualquier orden.
-
----
-
-## Cómo correrlo
-
-```bash
-cp .env.example .env
-docker compose up -d            # Postgres + Redis
-npm install
-npx prisma migrate dev          # migraciones y cliente
-npm run seed                    # usuarios y buses de prueba
-npm run start:dev
-```
-
-Si el puerto 5432 está ocupado, usa `POSTGRES_PORT=5433` en `.env` y el mismo puerto en `DATABASE_URL`.
-Las variables están documentadas en `.env.example`.
-
-| Comando | Descripción |
-|---|---|
-| `npm run start:dev` | Servidor en modo watch |
-| `npm run build` · `npm run start:prod` | Compilar y correr `dist/main.js` |
-| `npm test` | Pruebas unitarias y de arquitectura |
-| `npm run loadtest` | Concurrencia real contra el servidor (requiere servidor y `npm run seed`) |
-| `npm run loadtest:outbox` | Detiene Redis un momento y verifica que las alertas no se pierden |
-| `npm run seed` | Reinicia los datos de desarrollo (destructivo) |
-
----
-
-## Pruebas
-
-- **`npm test`**: reglas de dominio, control de acceso, arquitectura y concurrencia con repositorios en
-  memoria que intercalan las peticiones como una base de datos real.
-- **`npm run loadtest`**: las mismas carreras contra Postgres, Redis y WebSocket reales (cupos, orden de
-  llegada, plazo, cancelación, reproducción al reconectar, puntos y roles).
-- **`npm run loadtest:outbox`**: con Redis detenido, el evento no se pierde y llega una vez.
-
----
-
-## Preparado para la API real
-
-| Hoy (provisional) | Mañana | Qué cambia |
-|---|---|---|
-| Feed simulado de posiciones | API de TransMilenio | Un adapter nuevo que llame al mismo caso de uso, y `FLEET_FEED_MODE=external` |
-| Falla reportada por conductor o admin | Detección por telemetría | El adapter invoca el mismo caso de uso |
-| Header `x-employee-id` | Login con JWT | Cambia solo `AuthenticateEmployeeUseCase` |
-| Datos del seed | Datos reales | Sincronizar `buses` y `users` |
-
----
-
-## Pendiente
-
-Login con contraseña y JWT, gestión de usuarios, inspecciones con evidencia fotográfica, rutas alternativas,
-KPIs y dashboard, y pruebas de carga en CI.
