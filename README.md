@@ -107,7 +107,7 @@ que llegan por WebSocket mientras el simulador lo mueve solo cada
 curl -X PATCH http://localhost:3000/fleet/buses/<ID>/start-trip
 ```
 
-## Nota sobre este entorno de generación
+## Nota sobre este entorno
 
 Al armar este scaffold, `npx prisma generate` no pudo descargar sus binarios porque
 este sandbox no tiene salida a `binaries.prisma.sh`. En tu máquina, con internet
