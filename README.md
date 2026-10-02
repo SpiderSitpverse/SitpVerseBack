@@ -99,17 +99,7 @@ npm run seed                  # crea 4 buses de prueba
 npm run start:dev
 ```
 
-Para probar el flujo realtime sin frontend: pon un bus en servicio y mira los eventos
-que llegan por WebSocket mientras el simulador lo mueve solo cada
-`FLEET_SIMULATION_INTERVAL_MS`:
 
-```bash
-curl -X PATCH http://localhost:3000/fleet/buses/<ID>/start-trip
-```
 
-## Nota sobre este entorno
 
-Al armar este scaffold, `npx prisma generate` no pudo descargar sus binarios porque
-este sandbox no tiene salida a `binaries.prisma.sh`. En tu máquina, con internet
-normal, ese comando corre sin problema — es el primer paso del "Cómo correrlo" de
-arriba y es indispensable antes de levantar el proyecto.
+
