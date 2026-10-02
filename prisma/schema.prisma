@@ -7,6 +7,35 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// IDENTITY — dueño: modules/identity
+// ═══════════════════════════════════════════════════════════════════════════
+
+enum UserRole {
+  ADMIN
+  DRIVER
+  MECHANICAL
+}
+
+// Usuario mínimo: el login real (JWT) llegará después; hoy se identifica por employeeId.
+model User {
+  id         String   @id @default(uuid())
+  employeeId String   @unique
+  name       String
+  role       UserRole
+  createdAt  DateTime @default(now())
+
+  bus     Bus?              @relation("BusDriver")
+  claims  AssistanceClaim[]
+  rewards RewardEntry[]
+
+  @@map("users")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FLEET — dueño: modules/fleet
+// ═══════════════════════════════════════════════════════════════════════════
+
 enum BusStatus {
   IDLE // el bus existe pero no está en servicio
   IN_SERVICE // en ruta, emitiendo posición
@@ -14,15 +43,17 @@ enum BusStatus {
 }
 
 model Bus {
-  id        String    @id @default(uuid())
-  plate     String    @unique
-  route     String
-  driver    String?
-  status    BusStatus @default(IDLE)
-  latitude  Float?
-  longitude Float?
-  updatedAt DateTime  @updatedAt
-  createdAt DateTime  @default(now())
+  id             String    @id @default(uuid())
+  plate          String    @unique
+  route          String
+  // Conductor asignado (un bus ↔ un conductor). Permite autorizar "solo opera SU bus".
+  driverId       String?   @unique
+  assignedDriver User?     @relation("BusDriver", fields: [driverId], references: [id])
+  status         BusStatus @default(IDLE)
+  latitude       Float?
+  longitude      Float?
+  updatedAt      DateTime  @updatedAt
+  createdAt      DateTime  @default(now())
 
   positions BusPosition[]
 
@@ -31,13 +62,127 @@ model Bus {
 
 // Historial de posiciones — soporta trazabilidad (Épica 3) y "detalle de bus" (HU-13)
 model BusPosition {
-  id        String   @id @default(uuid())
-  busId     String
-  bus       Bus      @relation(fields: [busId], references: [id], onDelete: Cascade)
-  latitude  Float
-  longitude Float
+  id         String   @id @default(uuid())
+  busId      String
+  bus        Bus      @relation(fields: [busId], references: [id], onDelete: Cascade)
+  latitude   Float
+  longitude  Float
   recordedAt DateTime @default(now())
 
   @@index([busId, recordedAt])
   @@map("bus_positions")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ASSISTANCE — dueño: modules/assistance
+// Alertas con cupos: el primero en aceptar se queda el cupo (concurrencia).
+// ═══════════════════════════════════════════════════════════════════════════
+
+enum IncidentReportStatus {
+  REPORTED // el conductor avisó a administración
+  HELP_REQUESTED // el admin ya lanzó la alerta de apoyo a conductores
+}
+
+// Uso 1 (paso 1): un conductor reporta un imprevisto a administración.
+model DriverIncident {
+  id           String               @id @default(uuid())
+  busId        String
+  reportedById String
+  type         String
+  description  String?
+  status       IncidentReportStatus @default(REPORTED)
+  createdAt    DateTime             @default(now())
+
+  @@map("driver_incidents")
+}
+
+enum AssistanceKind {
+  DRIVER_SUPPORT // uso 1: N conductores/buses de apoyo
+  REPAIR // uso 2: 1 mecánico para reparar un bus
+}
+
+enum CallStatus {
+  OPEN
+  FILLED // todos los cupos tomados: la notificación se deshabilita
+  COMPLETED
+}
+
+// Alerta "reclamable". `slots` = cupos; `claimedCount` = reclamos ACTIVOS, se modifica de forma atómica.
+// En la migración hay un CHECK (claimedCount <= slots) y un índice único parcial
+// que impide dos reparaciones abiertas para el mismo bus.
+model AssistanceCall {
+  id           String         @id @default(uuid())
+  kind         AssistanceKind
+  incidentId   String?
+  busId        String
+  slots        Int
+  claimedCount Int            @default(0)
+  rewardPoints Int
+  status       CallStatus     @default(OPEN)
+  createdById  String
+  description  String?
+  createdAt    DateTime       @default(now())
+  completedAt  DateTime?
+
+  claims AssistanceClaim[]
+
+  @@index([kind, status])
+  @@map("assistance_calls")
+}
+
+enum ClaimStatus {
+  ACTIVE
+  CANCELLED // el admin lo canceló (no llegó a tiempo): libera el cupo
+}
+
+model AssistanceClaim {
+  id            String         @id @default(uuid())
+  callId        String
+  call          AssistanceCall @relation(fields: [callId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User           @relation(fields: [userId], references: [id])
+  status        ClaimStatus    @default(ACTIVE)
+  // Bus desde el que se acude (conductor de apoyo); el admin lo sigue en el mapa en tiempo real.
+  busId         String?
+  // Plazo máximo para llegar (aceptación + ASSISTANCE_ARRIVAL_MINUTES). Si vence, el admin cancela y reenvía.
+  arriveBy      DateTime
+  cancelledAt   DateTime?
+  cancelledById String?
+  createdAt     DateTime       @default(now())
+
+  // Un usuario solo puede tomar UN cupo por alerta; si lo cancelan no puede retomarlo.
+  @@unique([callId, userId])
+  @@index([callId, status])
+  @@map("assistance_claims")
+}
+
+// Libro de puntos: una fila por (usuario, alerta). El UNIQUE impide pagar dos veces la misma alerta.
+// El saldo se calcula sumando; así hay auditoría y no se mezcla con la tabla de usuarios (identity).
+model RewardEntry {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  callId    String
+  points    Int
+  createdAt DateTime @default(now())
+
+  @@unique([userId, callId])
+  @@map("reward_entries")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SHARED — Transactional Outbox
+// Los eventos que NO se pueden perder se escriben aquí en la MISMA transacción que
+// el cambio de estado; un relay los publica en Redis Streams (ver shared/infrastructure/outbox).
+// ═══════════════════════════════════════════════════════════════════════════
+
+model OutboxEvent {
+  id          BigInt    @id @default(autoincrement()) // orden global; viaja como `seq`
+  eventId     String    @unique // idempotencia: el cliente descarta duplicados (entrega at-least-once)
+  channel     String // stream de Redis destino
+  payload     Json
+  createdAt   DateTime  @default(now())
+  publishedAt DateTime?
+
+  @@map("outbox_events")
 }

@@ -1,4 +1,5 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import { NotFoundError } from '../../../../shared/domain/errors';
 import {
   BUS_REPOSITORY,
   BusRepositoryPort,
@@ -29,7 +30,7 @@ export class UpdateBusPositionUseCase {
   async execute(busId: string, latitude: number, longitude: number) {
     const bus = await this.busRepository.findById(busId);
     if (!bus) {
-      throw new NotFoundException(`Bus ${busId} no encontrado`);
+      throw new NotFoundError(`Bus ${busId} no encontrado`);
     }
 
     bus.updatePosition(latitude, longitude);

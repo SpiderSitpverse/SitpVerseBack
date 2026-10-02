@@ -1,4 +1,3 @@
-version: "3.9"
 services:
   postgres:
     image: postgres:16-alpine
@@ -8,7 +7,8 @@ services:
       POSTGRES_PASSWORD: sitpverse
       POSTGRES_DB: sitpverse
     ports:
-      - "5432:5432"
+      # POSTGRES_PORT permite evitar choques con otro Postgres local (ver .env.example)
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - sitpverse_pgdata:/var/lib/postgresql/data
 

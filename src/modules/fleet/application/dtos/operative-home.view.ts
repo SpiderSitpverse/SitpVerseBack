@@ -1,6 +1,4 @@
-/**
- * "validar la información mostrada según el usuario operativo".
- */
+/** Vista del Home de un usuario operativo: solo el bus que tiene asignado (HU-11). */
 export interface OperativeHomeView {
   busId: string;
   plate: string;

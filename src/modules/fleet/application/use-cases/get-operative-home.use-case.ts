@@ -1,4 +1,5 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import { NotFoundError } from '../../../../shared/domain/errors';
 import {
   BUS_REPOSITORY,
   BusRepositoryPort,
@@ -7,7 +8,8 @@ import { BusStatus } from '../../domain/value-objects/bus-status.enum';
 import { OperativeHomeView } from '../dtos/operative-home.view';
 
 /**
- *Home para usuarios operativos.
+ * HU-11: Home para usuarios operativos.
+ * El conductor autenticado ve SU bus (relación `driverId`).
  */
 @Injectable()
 export class GetOperativeHomeUseCase {
@@ -15,12 +17,12 @@ export class GetOperativeHomeUseCase {
     @Inject(BUS_REPOSITORY) private readonly busRepository: BusRepositoryPort,
   ) {}
 
-  async execute(driver: string): Promise<OperativeHomeView> {
-    const bus = await this.busRepository.findByDriver(driver);
+  async execute(driverId: string): Promise<OperativeHomeView> {
+    const bus = await this.busRepository.findByDriverId(driverId);
 
     if (!bus) {
-      throw new NotFoundException(
-        `No hay un bus asignado al operativo "${driver}"`,
+      throw new NotFoundError(
+        'No tienes un bus asignado',
       );
     }
 
