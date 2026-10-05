@@ -200,3 +200,103 @@ cambio de estado + evento ──► Postgres (una transacción)
 El orden es el de llegada de la petición al lock en Redis, no el instante del clic en el teléfono: la red
 del cliente queda fuera del control del servidor. Dos peticiones con menos de ~10 ms de diferencia pueden
 salir en cualquier orden.
+
+## HUs del MVP cubiertas en esta rama
+
+Esta rama reúne las 21 HU definidas para el segundo corte del MVP:
+
+| HU | Descripción | Dónde vive |
+|---|---|---|
+| HU-02 | Iniciar sesión | `identity` y guard global |
+| HU-09 | Home para usuarios operativos | `GET /fleet/home/operativo` |
+| HU-10 | Home para usuarios administrativos | Home administrativo del frontend con APIs protegidas por rol |
+| HU-11 | Acceso según el rol | `AuthGuard` + `@Roles(...)` + `BusAccessService` |
+| HU-12 | Visualizar ubicación de los buses | `GET /fleet/buses` + eventos de posición |
+| HU-13 | Consultar información detallada de un bus | `GET /fleet/buses/:id` |
+| HU-14 | Filtrar buses por estado | `GET /fleet/buses?status=` |
+| HU-16 | Recibir alertas de bloqueos | `GET /assistance/blockages` + WebSocket |
+| HU-17 | Aceptar rutas alternativas | `POST /assistance/routes/:routeId/accept` |
+| HU-22 | Adjuntar evidencia fotográfica | `POST /assistance/incidents/:id/evidence` |
+| HU-30 | Asignar grúas y cuadrillas | `POST /assistance/blockages/:id/tow` |
+| HU-44 | Enviar alertas de bloqueos a la flota | `POST /assistance/blockages/:id/alert` |
+| HU-45 | Listar incidentes registrados en ruta | `GET /assistance/blockages` |
+| HU-46 | Visualizar rutas alternativas en tiempo real | `GET /assistance/incidents/:id/routes` + WebSocket |
+| HU-47 | Asignar una ruta alternativa desde el mapa | `POST /assistance/incidents/:id/routes` + `/assign` |
+| HU-48 | Consultar servicio/ruta asignada | `GET /assistance/routes/assigned/me` |
+| HU-49 | Reportar inicio de viaje y actualizar posición | `start-trip` + `position` + WebSocket |
+| HU-50 | Consultar reportes de grúas y cuadrillas | `GET /assistance/tow-reports` |
+| HU-51 | Finalizar servicio/viaje del bus | `PATCH /fleet/buses/:id/finish-trip` |
+| HU-52 | Aceptar ruta alternativa asignada | `POST /assistance/routes/:routeId/accept` |
+| HU-53 | Aceptar servicio de reparación | `POST /assistance/calls/:id/accept` |
+
+### Reporte de implementación
+
+- **21 HU implementadas** en backend.
+- **58 pruebas automatizadas exitosas** en 7 suites.
+- Build de NestJS exitoso.
+- Esquema Prisma válido y formateado.
+- Pruebas de arquitectura y autorización activas.
+- Eventos durables publicados mediante outbox y Redis Streams.
+
+La evidencia fotográfica de HU-22 se guarda como metadatos y URL (`url`, `caption`, `capturedAt`);
+la carga binaria debe realizarse desde un almacenamiento externo como Azure Blob Storage. Esta API
+no contiene credenciales ni implementa almacenamiento de archivos por sí misma.
+
+## Endpoints del segundo corte
+
+### Bloqueos, incidentes y recursos
+
+```text
+GET  /assistance/blockages
+POST /assistance/blockages
+POST /assistance/blockages/:id/alert
+POST /assistance/blockages/:id/tow
+GET  /assistance/tow-reports
+```
+
+### Rutas alternativas
+
+```text
+GET  /assistance/incidents/:id/routes
+POST /assistance/incidents/:id/routes
+POST /assistance/routes/:routeId/assign
+GET  /assistance/routes/assigned/me
+POST /assistance/routes/:routeId/accept
+```
+
+### Evidencia fotográfica
+
+```text
+POST /assistance/incidents/:id/evidence
+GET  /assistance/incidents/:id/evidence
+```
+
+## Eventos realtime del segundo corte
+
+```text
+blockage.reported
+blockage.alerted
+tow.assigned
+route.proposed
+route.assigned
+route.accepted
+incident.evidence.attached
+```
+
+## Validación local
+
+```bash
+npm run build
+npm test -- --runInBand
+npx prisma validate
+npx prisma format --check
+```
+
+Resultado esperado:
+
+```text
+Build: PASS
+Tests: 7 suites, 58 tests passed
+Prisma validate: PASS
+Prisma format: PASS
+```

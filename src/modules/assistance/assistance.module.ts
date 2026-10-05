@@ -11,6 +11,7 @@ import { ReportBusFaultUseCase } from './application/use-cases/report-bus-fault.
 import { ReportDriverIncidentUseCase } from './application/use-cases/report-driver-incident.use-case';
 import { RequestDriverSupportUseCase } from './application/use-cases/request-driver-support.use-case';
 import { ResendCallUseCase } from './application/use-cases/resend-call.use-case';
+import { RoutingService } from './infrastructure/prisma/routing.service';
 import { ASSISTANCE_REPOSITORY } from './domain/ports/assistance-repository.port';
 import { BUS_DIRECTORY } from './domain/ports/bus-directory.port';
 import { FleetBusDirectory } from './infrastructure/fleet/fleet-bus-directory.adapter';
@@ -38,6 +39,7 @@ import { PrismaAssistanceRepository } from './infrastructure/prisma/assistance.r
     ListIncidentsUseCase,
     ListCallsUseCase,
     GetMyProfileUseCase,
+    RoutingService,
 
     // Puerto → adapter
     { provide: ASSISTANCE_REPOSITORY, useClass: PrismaAssistanceRepository },

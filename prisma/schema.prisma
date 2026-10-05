@@ -83,17 +83,88 @@ enum IncidentReportStatus {
   HELP_REQUESTED // el admin ya lanzó la alerta de apoyo a conductores
 }
 
+enum BlockageStatus {
+  OPEN
+  RESOLVED
+}
+
+enum AlternativeRouteStatus {
+  PROPOSED
+  ASSIGNED
+  ACCEPTED
+}
+
+enum TowAssignmentStatus {
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+}
+
 // Uso 1 (paso 1): un conductor reporta un imprevisto a administración.
 model DriverIncident {
-  id           String               @id @default(uuid())
-  busId        String
-  reportedById String
-  type         String
-  description  String?
-  status       IncidentReportStatus @default(REPORTED)
-  createdAt    DateTime             @default(now())
+  id             String               @id @default(uuid())
+  busId          String
+  reportedById   String
+  type           String
+  description    String?
+  status         IncidentReportStatus @default(REPORTED)
+  blockageStatus BlockageStatus       @default(OPEN)
+  createdAt      DateTime             @default(now())
+
+  alternativeRoutes AlternativeRoute[]
+  towAssignments    TowAssignment[]
+  evidence          IncidentEvidence[]
 
   @@map("driver_incidents")
+}
+
+model AlternativeRoute {
+  id           String                 @id @default(uuid())
+  incidentId   String
+  incident     DriverIncident         @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  name         String
+  geometry     Json
+  status       AlternativeRouteStatus @default(PROPOSED)
+  assignedToId String?
+  assignedAt   DateTime?
+  acceptedAt   DateTime?
+  createdAt    DateTime               @default(now())
+
+  @@index([incidentId, status])
+  @@index([assignedToId, status])
+  @@map("alternative_routes")
+}
+
+model TowAssignment {
+  id           String              @id @default(uuid())
+  incidentId   String
+  incident     DriverIncident      @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  busId        String
+  towTruck     String
+  crew         String
+  status       TowAssignmentStatus @default(ASSIGNED)
+  assignedById String
+  createdAt    DateTime            @default(now())
+  completedAt  DateTime?
+
+  @@index([incidentId, status])
+  @@map("tow_assignments")
+}
+
+// Evidencia fotográfica asociada a un incidente de ruta/inspección.
+// El binario se almacena fuera del monolito (URL firmada o URL de almacenamiento).
+model IncidentEvidence {
+  id           String         @id @default(uuid())
+  incidentId   String
+  incident     DriverIncident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  url          String
+  caption      String?
+  capturedAt   DateTime?
+  uploadedById String
+  createdAt    DateTime       @default(now())
+
+  @@index([incidentId, createdAt])
+  @@map("incident_evidence")
 }
 
 enum AssistanceKind {
