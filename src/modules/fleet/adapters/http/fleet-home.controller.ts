@@ -1,24 +1,15 @@
 import { Controller, Get } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { AuthenticatedUser, CurrentUser, Roles } from '../../../identity/public';
 import { GetOperativeHomeUseCase } from '../../application/use-cases/get-operative-home.use-case';
 
-/**
- * Home para usuarios operativos.
- * GET /fleet/home/operativo
- */
+/** HU-11: Home del conductor (su bus). GET /fleet/home/operativo */
 @Controller('fleet/home')
 export class FleetHomeController {
-  constructor(
-    private readonly getOperativeHome: GetOperativeHomeUseCase,
-    private readonly config: ConfigService,
-  ) {}
+  constructor(private readonly getOperativeHome: GetOperativeHomeUseCase) {}
 
   @Get('operativo')
-  operativo() {
-    const driver = this.config.get<string>(
-      'OPERATIVE_DEMO_DRIVER',
-      'Carlos Pérez',
-    );
-    return this.getOperativeHome.execute(driver);
+  @Roles('DRIVER')
+  operativo(@CurrentUser() user: AuthenticatedUser) {
+    return this.getOperativeHome.execute(user.id);
   }
 }

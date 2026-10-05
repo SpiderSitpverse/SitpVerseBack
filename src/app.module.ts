@@ -1,14 +1,25 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { FleetModule } from './modules/fleet/fleet.module';
+import { AssistanceModule } from './modules/assistance/public';
+import { FleetModule } from './modules/fleet/public';
+import { IdentityModule } from './modules/identity/public';
 import { RealtimeModule } from './realtime/realtime.module';
+import { SharedModule } from './shared/shared.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    SharedModule, // Prisma + Redis + lock FIFO + outbox (global)
+
+    // Módulos de negocio (cada uno es hexagonal: domain / application / infrastructure / adapters).
+    // Solo se conocen por su `public.ts`; entre sí se comunican por eventos.
+    IdentityModule, // usuarios y control de acceso (guard global)
     FleetModule,
+    AssistanceModule,
+
+    // Entrega por WebSocket de lo que los módulos publican en Redis
     RealtimeModule,
-    // A medida que avancen: IncidentsModule, InspectionsModule, ResourcesModule, ReportingModule
+    // Pendientes según el story map: InspectionsModule, ReportingModule
   ],
 })
 export class AppModule {}

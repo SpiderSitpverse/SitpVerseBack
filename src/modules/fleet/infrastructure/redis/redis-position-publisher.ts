@@ -1,12 +1,12 @@
 import { Inject, Injectable } from '@nestjs/common';
 import Redis from 'ioredis';
+import { REDIS_CHANNELS } from '../../../../shared/contracts/realtime.contract';
+import { logEvent } from '../../../../shared/infrastructure/structured-log';
 import { REDIS_PUBLISHER_CLIENT } from '../../../../shared/infrastructure/redis.provider';
 import {
   BusPositionEvent,
   PositionPublisherPort,
 } from '../../domain/ports/position-publisher.port';
-
-export const FLEET_POSITIONS_CHANNEL = 'fleet:positions';
 
 /**
  * Adapter (driven adapter): implementa el puerto de publicación usando Redis Pub/Sub.
@@ -22,6 +22,16 @@ export class RedisPositionPublisher implements PositionPublisherPort {
   ) {}
 
   async publish(event: BusPositionEvent): Promise<void> {
-    await this.redis.publish(FLEET_POSITIONS_CHANNEL, JSON.stringify(event));
+    try {
+      await this.redis.publish(REDIS_CHANNELS.FLEET_POSITIONS, JSON.stringify(event));
+    } catch (err) {
+      // La posición ya quedó guardada; perder UN evento no debe hacer fallar la actualización.
+      logEvent('error', 'event.publish_failed', {
+        event: 'fleet.position',
+        bus: event.plate,
+        severity: 'ERROR',
+        error: String(err),
+      });
+    }
   }
 }

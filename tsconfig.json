@@ -16,11 +16,6 @@
     "noImplicitAny": true,
     "strictBindCallApply": false,
     "forceConsistentCasingInFileNames": true,
-    "noFallthroughCasesInSwitch": false,
-    "paths": {
-      "@modules/*": ["src/modules/*"],
-      "@realtime/*": ["src/realtime/*"],
-      "@shared/*": ["src/shared/*"]
-    }
+    "noFallthroughCasesInSwitch": false
   }
 }

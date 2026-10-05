@@ -2,4 +2,5 @@ export enum BusStatus {
   IDLE = 'IDLE',
   IN_SERVICE = 'IN_SERVICE',
   FINISHED = 'FINISHED',
+  TRANSFER_EN_ROUTE = 'TRANSFER_EN_ROUTE',
 }

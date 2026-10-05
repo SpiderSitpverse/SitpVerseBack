@@ -1,9 +1,13 @@
+import { ConflictError } from '../../../../shared/domain/errors';
 import { BusStatus } from '../value-objects/bus-status.enum';
 
 export interface BusProps {
   id: string;
   plate: string;
   route: string;
+  /** Conductor asignado (id en `identity`); permite autorizar "solo opera SU bus". */
+  driverId?: string | null;
+  /** Nombre del conductor, solo para mostrar. */
   driver?: string | null;
   status: BusStatus;
   latitude?: number | null;
@@ -16,7 +20,16 @@ export interface BusProps {
  * Toda regla de negocio sobre "qué puede hacer un bus" vive acá.
  */
 export class Bus {
-  private constructor(private props: BusProps) {}
+  /**
+   * Estado con el que se cargó de la base de datos. El repositorio lo usa para guardar
+   * con compare-and-set (`WHERE status = <este>`): si otro proceso cambió el estado mientras
+   * tanto, el guardado se rechaza en lugar de pisar el cambio ajeno (lost update).
+   */
+  private readonly statusWhenLoaded: BusStatus;
+
+  private constructor(private props: BusProps) {
+    this.statusWhenLoaded = props.status;
+  }
 
   static fromPersistence(props: BusProps): Bus {
     return new Bus(props);
@@ -34,6 +47,9 @@ export class Bus {
   get driver() {
     return this.props.driver ?? null;
   }
+  get driverId() {
+    return this.props.driverId ?? null;
+  }
   get status() {
     return this.props.status;
   }
@@ -45,6 +61,9 @@ export class Bus {
   }
   get updatedAt() {
     return this.props.updatedAt;
+  }
+  get expectedStatus() {
+    return this.statusWhenLoaded;
   }
 
   /** HU-49: reportar inicio de viaje */
@@ -80,16 +99,14 @@ export class Bus {
   }
 }
 
-export class BusNotInServiceError extends Error {
+export class BusNotInServiceError extends ConflictError {
   constructor(plate: string) {
-    super(`El bus ${plate} no está en servicio.`);
-    this.name = 'BusNotInServiceError';
+    super(`El bus ${plate} no está en servicio.`, { plate });
   }
 }
 
-export class BusAlreadyInServiceError extends Error {
+export class BusAlreadyInServiceError extends ConflictError {
   constructor(plate: string) {
-    super(`El bus ${plate} ya está en servicio.`);
-    this.name = 'BusAlreadyInServiceError';
+    super(`El bus ${plate} ya está en servicio.`, { plate });
   }
 }
