@@ -140,6 +140,7 @@ export class PrismaBusRepository implements BusRepositoryPort {
       capacity: row.capacity,
       locationLabel: row.locationLabel,
       tripStartedAt: row.tripStartedAt,
+      photoUrl: row.photoUrl,
       updatedAt: row.updatedAt,
     });
   }

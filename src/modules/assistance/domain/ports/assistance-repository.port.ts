@@ -14,6 +14,7 @@ import {
   ClaimWithUser,
   CompleteResult,
   DriverIncidentModel,
+  DeleteIncidentResult,
 } from '../models/assistance.models';
 
 export const ASSISTANCE_REPOSITORY = Symbol('ASSISTANCE_REPOSITORY');
@@ -44,6 +45,17 @@ export interface AssistanceRepositoryPort {
   ): Promise<DriverIncidentModel>;
   findIncident(id: string): Promise<DriverIncidentModel | null>;
   listIncidents(): Promise<DriverIncidentModel[]>;
+
+  /**
+   * Elimina un incidente con sus rutas, grúas y evidencias, y las alertas que nadie atendió, en una
+   * transacción. Si alguna alerta ya tiene aceptaciones o está terminada NO se borra nada
+   * (`IN_PROGRESS`): hay trabajo o puntos de por medio. Bloquea las alertas con `FOR UPDATE` para no
+   * competir con un conductor que acepta justo en ese momento.
+   */
+  deleteIncident(
+    id: string,
+    eventsOf: EventsOf<{ id: string; busId: string }>,
+  ): Promise<DeleteIncidentResult>;
 
   /**
    * Incidente REPORTED→HELP_REQUESTED + crea la alerta, en una transacción.

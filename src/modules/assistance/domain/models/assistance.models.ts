@@ -150,6 +150,10 @@ export type ClaimResult =
   | { ok: true; call: AssistanceCallModel; claim: ClaimModel; filled: boolean }
   | { ok: false; reason: ClaimFailure };
 
+export type DeleteIncidentResult =
+  | { ok: true; busId: string; removedCalls: number }
+  | { ok: false; reason: 'NOT_FOUND' | 'IN_PROGRESS' };
+
 export type CancelFailure = 'NOT_FOUND' | 'NOT_ACTIVE' | 'COMPLETED';
 
 export type CancelResult =

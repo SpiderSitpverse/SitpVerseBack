@@ -21,6 +21,8 @@ export interface BusProps {
   locationLabel?: string | null;
   /** Cuándo salió en su viaje actual (se fija en `startTrip`). */
   tripStartedAt?: Date | null;
+  /** Foto real del bus (URL de una imagen ya subida); la cambia el administrador. */
+  photoUrl?: string | null;
   updatedAt: Date;
 }
 
@@ -33,6 +35,8 @@ export interface BusDetails {
   operator?: string | null;
   capacity?: number | null;
   locationLabel?: string | null;
+  /** `null` quita la foto. */
+  photoUrl?: string | null;
 }
 
 /**

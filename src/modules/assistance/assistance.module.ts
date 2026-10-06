@@ -5,6 +5,7 @@ import { RepairReportsController } from './adapters/http/repair-reports.controll
 import { AcceptCallUseCase } from './application/use-cases/accept-call.use-case';
 import { CancelClaimUseCase } from './application/use-cases/cancel-claim.use-case';
 import { CompleteCallUseCase } from './application/use-cases/complete-call.use-case';
+import { DeleteIncidentUseCase } from './application/use-cases/delete-incident.use-case';
 import { GetMyProfileUseCase } from './application/use-cases/get-my-profile.use-case';
 import { ListCallsUseCase } from './application/use-cases/list-calls.use-case';
 import { ListIncidentsUseCase } from './application/use-cases/list-incidents.use-case';
@@ -44,6 +45,7 @@ import { PrismaAssistanceRepository } from './infrastructure/prisma/assistance.r
     ResendCallUseCase,
     CompleteCallUseCase,
     ListIncidentsUseCase,
+    DeleteIncidentUseCase,
     ListCallsUseCase,
     GetMyProfileUseCase,
     SaveRepairReportUseCase,

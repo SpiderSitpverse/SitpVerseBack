@@ -98,6 +98,39 @@ describe('Registro de flota', () => {
     expect(updated).toMatchObject({ model: 'Volvo', capacity: 270, status: 'IN_SERVICE', plate: 'TMX-001' });
   });
 
+  describe('foto del bus', () => {
+    const PHOTO = '/uploads/3f1c2b4e-5a6d-4e7f-8a9b-0c1d2e3f4a5b.jpg';
+
+    it('el admin sube una foto, la cambia y la quita (null)', async () => {
+      const t = build();
+      const bus = t.buses.seed('TMX-001');
+
+      expect(await t.update.execute(bus.id, { photoUrl: PHOTO })).toMatchObject({ photoUrl: PHOTO });
+      const other = '/uploads/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.png';
+      expect(await t.update.execute(bus.id, { photoUrl: other })).toMatchObject({ photoUrl: other });
+      expect(await t.update.execute(bus.id, { photoUrl: null })).toMatchObject({ photoUrl: null });
+    });
+
+    it('editar otros datos no borra la foto', async () => {
+      const t = build();
+      const bus = t.buses.seed('TMX-001');
+      await t.update.execute(bus.id, { photoUrl: PHOTO });
+      expect(await t.update.execute(bus.id, { model: 'Volvo' })).toMatchObject({ model: 'Volvo', photoUrl: PHOTO });
+    });
+
+    it.each([
+      'https://sitio-externo.com/foto.jpg',
+      '/uploads/../../etc/passwd',
+      '/uploads/no-es-uuid.jpg',
+      '/uploads/3f1c2b4e-5a6d-4e7f-8a9b-0c1d2e3f4a5b.svg',
+      'javascript:alert(1)',
+    ])('rechaza la foto %p (solo se aceptan imágenes subidas a este back)', async (photoUrl) => {
+      const t = build();
+      const bus = t.buses.seed('TMX-001');
+      await expect(t.update.execute(bus.id, { photoUrl })).rejects.toBeInstanceOf(InvalidInputError);
+    });
+  });
+
   it('no se puede cambiar la placa a una que ya tiene otro bus (409)', async () => {
     const t = build();
     t.buses.seed('TMX-001');

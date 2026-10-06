@@ -67,6 +67,8 @@ model Bus {
   locationLabel  String?
   // Cuándo salió el bus en su viaje actual (el mapa y el inicio del conductor muestran "salió 14:32")
   tripStartedAt  DateTime?
+  // Foto real del bus (URL devuelta por POST /files/images); la sube/cambia el admin
+  photoUrl       String?
   updatedAt      DateTime  @updatedAt
   createdAt      DateTime  @default(now())
 

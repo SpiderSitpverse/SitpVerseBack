@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Inject,
   Param,
@@ -17,6 +18,7 @@ import { AuthenticatedUser, CurrentUser, Roles } from '../../../identity/public'
 import { AcceptCallUseCase } from '../../application/use-cases/accept-call.use-case';
 import { CancelClaimUseCase } from '../../application/use-cases/cancel-claim.use-case';
 import { CompleteCallUseCase } from '../../application/use-cases/complete-call.use-case';
+import { DeleteIncidentUseCase } from '../../application/use-cases/delete-incident.use-case';
 import { GetMyProfileUseCase } from '../../application/use-cases/get-my-profile.use-case';
 import { ListCallsUseCase } from '../../application/use-cases/list-calls.use-case';
 import { ListIncidentsUseCase } from '../../application/use-cases/list-incidents.use-case';
@@ -48,6 +50,7 @@ export class AssistanceController {
     private readonly resendCall: ResendCallUseCase,
     private readonly completeCall: CompleteCallUseCase,
     private readonly listIncidents: ListIncidentsUseCase,
+    private readonly deleteIncident: DeleteIncidentUseCase,
     private readonly listCalls: ListCallsUseCase,
     private readonly myProfile: GetMyProfileUseCase,
     private readonly routing: RoutingService,
@@ -193,6 +196,13 @@ export class AssistanceController {
   @Roles('ADMIN')
   incidents() {
     return this.listIncidents.execute();
+  }
+
+  /** El admin elimina un incidente que nadie atendió (409 si ya tiene aceptaciones o está terminado). */
+  @Delete('incidents/:id')
+  @Roles('ADMIN')
+  removeIncident(@Param('id', ParseUUIDPipe) id: string) {
+    return this.deleteIncident.execute(id);
   }
 
   /** Uso 1 · paso 2: el admin lanza la alerta a conductores (N cupos + recompensa). */
