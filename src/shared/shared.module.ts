@@ -1,7 +1,9 @@
 import { Global, Module } from '@nestjs/common';
 import { DISTRIBUTED_LOCK } from './domain/distributed-lock.port';
+import { FILE_STORAGE } from './domain/file-storage.port';
 import { OutboxReader } from './infrastructure/outbox/outbox.reader';
 import { OutboxRelay } from './infrastructure/outbox/outbox.relay';
+import { LocalFileStorage } from './infrastructure/storage/local-file-storage';
 import { PrismaService } from './infrastructure/prisma.service';
 import { RedisDistributedLock } from './infrastructure/redis-distributed-lock';
 import { RedisPublisherProvider, RedisRelayProvider } from './infrastructure/redis.provider';
@@ -21,6 +23,8 @@ import { RedisPublisherProvider, RedisRelayProvider } from './infrastructure/red
     { provide: DISTRIBUTED_LOCK, useClass: RedisDistributedLock },
     OutboxRelay,
     OutboxReader,
+    LocalFileStorage,
+    { provide: FILE_STORAGE, useExisting: LocalFileStorage },
   ],
   exports: [
     PrismaService,
@@ -28,6 +32,8 @@ import { RedisPublisherProvider, RedisRelayProvider } from './infrastructure/red
     DISTRIBUTED_LOCK,
     OutboxRelay,
     OutboxReader,
+    FILE_STORAGE,
+    LocalFileStorage,
   ],
 })
 export class SharedModule {}

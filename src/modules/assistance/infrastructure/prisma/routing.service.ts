@@ -24,7 +24,7 @@ export class RoutingService {
     });
   }
 
-  async reportBlockage(data: { busId: string; reportedById: string; type: string; description?: string }) {
+  async reportBlockage(data: { busId: string; reportedById: string; reportedByName?: string; type: string; description?: string }) {
     const incident = await this.prisma.$transaction(async (tx) => {
       const created = await tx.driverIncident.create({ data });
       const event = await this.event('blockage.reported', { incidentId: created.id, busId: created.busId }, { roles: ['ADMIN'] });

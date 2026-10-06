@@ -45,3 +45,17 @@ export class BusyError extends AppError {
     super(message, 'BUSY', details);
   }
 }
+
+/** No se pudo comprobar quién es el usuario (credenciales o token inválidos). → 401 */
+export class UnauthorizedError extends AppError {
+  constructor(message: string, details?: Record<string, unknown>) {
+    super(message, 'UNAUTHORIZED', details);
+  }
+}
+
+/** Los datos enviados no cumplen una regla de negocio (formato, longitud...). → 400 */
+export class InvalidInputError extends AppError {
+  constructor(message: string, details?: Record<string, unknown>) {
+    super(message, 'INVALID_INPUT', details);
+  }
+}

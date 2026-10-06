@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { FleetModule } from '../fleet/public';
 import { AssistanceController } from './adapters/http/assistance.controller';
+import { RepairReportsController } from './adapters/http/repair-reports.controller';
 import { AcceptCallUseCase } from './application/use-cases/accept-call.use-case';
 import { CancelClaimUseCase } from './application/use-cases/cancel-claim.use-case';
 import { CompleteCallUseCase } from './application/use-cases/complete-call.use-case';
@@ -11,6 +12,12 @@ import { ReportBusFaultUseCase } from './application/use-cases/report-bus-fault.
 import { ReportDriverIncidentUseCase } from './application/use-cases/report-driver-incident.use-case';
 import { RequestDriverSupportUseCase } from './application/use-cases/request-driver-support.use-case';
 import { ResendCallUseCase } from './application/use-cases/resend-call.use-case';
+import {
+  GetAssistanceSummaryUseCase,
+  GetRepairReportUseCase,
+  ListRepairReportsUseCase,
+  SaveRepairReportUseCase,
+} from './application/use-cases/repair-reports.use-cases';
 import { RoutingService } from './infrastructure/prisma/routing.service';
 import { ASSISTANCE_REPOSITORY } from './domain/ports/assistance-repository.port';
 import { BUS_DIRECTORY } from './domain/ports/bus-directory.port';
@@ -26,7 +33,7 @@ import { PrismaAssistanceRepository } from './infrastructure/prisma/assistance.r
  */
 @Module({
   imports: [FleetModule],
-  controllers: [AssistanceController],
+  controllers: [AssistanceController, RepairReportsController],
   providers: [
     // Casos de uso
     ReportDriverIncidentUseCase,
@@ -39,6 +46,10 @@ import { PrismaAssistanceRepository } from './infrastructure/prisma/assistance.r
     ListIncidentsUseCase,
     ListCallsUseCase,
     GetMyProfileUseCase,
+    SaveRepairReportUseCase,
+    GetRepairReportUseCase,
+    ListRepairReportsUseCase,
+    GetAssistanceSummaryUseCase,
     RoutingService,
 
     // Puerto → adapter

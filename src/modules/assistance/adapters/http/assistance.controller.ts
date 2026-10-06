@@ -1,4 +1,18 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Inject,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+  UploadedFile,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FILE_STORAGE, FileStoragePort } from '../../../../shared/domain/file-storage.port';
+import { InvalidInputError } from '../../../../shared/domain/errors';
+import { SinglePhotoInterceptor, storeUploadedImage } from '../../../../shared/http/image-upload';
 import { AuthenticatedUser, CurrentUser, Roles } from '../../../identity/public';
 import { AcceptCallUseCase } from '../../application/use-cases/accept-call.use-case';
 import { CancelClaimUseCase } from '../../application/use-cases/cancel-claim.use-case';
@@ -37,6 +51,7 @@ export class AssistanceController {
     private readonly listCalls: ListCallsUseCase,
     private readonly myProfile: GetMyProfileUseCase,
     private readonly routing: RoutingService,
+    @Inject(FILE_STORAGE) private readonly storage: FileStoragePort,
   ) {}
 
   /** HU-16/HU-45 — bloqueos e incidentes visibles para operación. */
@@ -50,7 +65,7 @@ export class AssistanceController {
   @Post('blockages')
   @Roles('DRIVER', 'ADMIN')
   reportBlockage(@CurrentUser() user: AuthenticatedUser, @Body() body: CreateBlockageDto) {
-    return this.routing.reportBlockage({ ...body, reportedById: user.id });
+    return this.routing.reportBlockage({ ...body, reportedById: user.id, reportedByName: user.name });
   }
 
   /** HU-44 — administración reenvía el bloqueo a todos los conductores de la flota. */
@@ -80,6 +95,36 @@ export class AssistanceController {
     @Body() body: AttachIncidentEvidenceDto,
   ) {
     return this.routing.attachEvidence(user.id, incidentId, body);
+  }
+
+  /**
+   * HU-22 — sube una FOTO como evidencia (multipart/form-data).
+   * Campos: `photo` (archivo JPEG/PNG/WebP, máx. 5 MB), `caption` y `capturedAt` (opcionales).
+   * Devuelve el registro de evidencia con su `url` relativa (p. ej. `/uploads/<id>.jpg`).
+   */
+  @Post('incidents/:id/evidence/upload')
+  @Roles('DRIVER', 'ADMIN', 'MECHANICAL')
+  @UseInterceptors(SinglePhotoInterceptor())
+  async uploadEvidence(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) incidentId: string,
+    @UploadedFile() photo: Express.Multer.File | undefined,
+    @Body() body: { caption?: string; capturedAt?: string },
+  ) {
+    if (body.capturedAt && Number.isNaN(Date.parse(body.capturedAt))) {
+      throw new InvalidInputError('capturedAt debe ser una fecha ISO válida');
+    }
+    const { url } = await storeUploadedImage(this.storage, photo);
+    try {
+      return await this.routing.attachEvidence(user.id, incidentId, {
+        url,
+        caption: body.caption?.slice(0, 500),
+        capturedAt: body.capturedAt,
+      });
+    } catch (error) {
+      await this.storage.remove(url); // no dejar el archivo huérfano si el incidente no existe
+      throw error;
+    }
   }
 
   @Get('incidents/:id/evidence')

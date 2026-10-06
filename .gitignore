@@ -16,3 +16,6 @@ dist/
 # logs y cobertura
 *.log
 coverage/
+
+# fotos de evidencia subidas por los usuarios
+uploads/

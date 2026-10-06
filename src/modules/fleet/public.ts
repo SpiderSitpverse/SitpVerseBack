@@ -6,3 +6,4 @@ export { FleetModule } from './fleet.module';
 export { FleetQueryService } from './application/services/fleet-query.service';
 export type { BusSummary } from './application/services/fleet-query.service';
 export type { BusPositionEvent } from './domain/ports/position-publisher.port';
+export type { BusDescription } from './application/services/fleet-query.service';

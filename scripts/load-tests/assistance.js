@@ -3,18 +3,13 @@
  *  1) Incidente de conductor -> admin -> alerta a N conductores (primeros N aceptan)
  *  2) Fallo de bus -> alerta a mecánicos (el primero se queda la reparación)
  *
- * Requiere servidor corriendo y `npm run seed` reciente.
+ * Requiere servidor corriendo y `npm run seed:reset` reciente.
  *   node scripts/load-test-assistance.js [baseUrl]
  */
-const { io } = require('socket.io-client');
+const { makeApi, listen: openSocket } = require('./lib');
 const BASE = process.argv[2] ?? 'http://localhost:3000';
 
-const api = (method, path, employeeId, body) =>
-  fetch(BASE + path, {
-    method,
-    headers: { 'Content-Type': 'application/json', 'x-employee-id': employeeId },
-    body: body ? JSON.stringify(body) : undefined,
-  }).then(async (r) => ({ status: r.status, body: await r.json().catch(() => ({})) }));
+const api = makeApi(BASE);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let failures = 0;
@@ -23,12 +18,7 @@ const check = (name, ok, extra = '') => {
   if (!ok) failures++;
 };
 
-function listen(employeeId, lastSeq) {
-  const events = [];
-  const socket = io(`${BASE}/realtime`, { auth: { employeeId, lastSeq }, transports: ['websocket'] });
-  socket.on('assistance:event', (e) => events.push(e));
-  return new Promise((resolve) => socket.on('identified', () => resolve({ socket, events })));
-}
+const listen = (employeeId, lastSeq) => openSocket(BASE, employeeId, lastSeq);
 
 (async () => {
   const ADMIN = '1001', ADMIN2 = '1002';
@@ -44,7 +34,7 @@ function listen(employeeId, lastSeq) {
 
   // ───── Control de acceso ─────
   const noHeader = await fetch(`${BASE}/assistance/calls`).then((r) => r.status);
-  check('Sin x-employee-id -> 401', noHeader === 401);
+  check('Sin token -> 401', noHeader === 401);
   const driverAsAdmin = await api('GET', '/assistance/incidents', DRIVERS[1]);
   check('Un DRIVER no puede listar incidentes de admin -> 403', driverAsAdmin.status === 403);
 

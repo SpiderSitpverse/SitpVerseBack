@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { FleetQueryService } from '../../../fleet/public';
+import { BusInfo } from '../../domain/models/assistance.models';
 import { BusDirectoryPort, BusRef } from '../../domain/ports/bus-directory.port';
 
 /**
@@ -16,5 +17,9 @@ export class FleetBusDirectory implements BusDirectoryPort {
 
   findBusOfDriver(userId: string): Promise<BusRef | null> {
     return this.fleet.findByDriverId(userId);
+  }
+
+  describe(busIds: string[]): Promise<Map<string, BusInfo>> {
+    return this.fleet.describe(busIds); // BusDescription de fleet ya tiene la forma de BusInfo
   }
 }

@@ -5,12 +5,16 @@ import {
   BusyError,
   ConflictError,
   ForbiddenError,
+  InvalidInputError,
   NotFoundError,
+  UnauthorizedError,
 } from '../domain/errors';
 
 const STATUS_BY_ERROR: [new (...args: never[]) => AppError, HttpStatus][] = [
   [NotFoundError, HttpStatus.NOT_FOUND],
   [ConflictError, HttpStatus.CONFLICT],
+  [InvalidInputError, HttpStatus.BAD_REQUEST],
+  [UnauthorizedError, HttpStatus.UNAUTHORIZED],
   [ForbiddenError, HttpStatus.FORBIDDEN],
   [BusyError, HttpStatus.SERVICE_UNAVAILABLE],
 ];

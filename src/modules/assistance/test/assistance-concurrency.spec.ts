@@ -44,7 +44,7 @@ function build(config: Record<string, unknown> = {}) {
     cancel: new CancelClaimUseCase(repo, lock),
     resend: new ResendCallUseCase(repo),
     complete: new CompleteCallUseCase(repo),
-    listCalls: new ListCallsUseCase(repo),
+    listCalls: new ListCallsUseCase(repo, buses),
   };
 }
 type Ctx = ReturnType<typeof build>;

@@ -4,18 +4,13 @@
  *   node scripts/load-tests/outbox-recovery.js [baseUrl]
  *
  * ATENCIÓN: detiene y vuelve a iniciar el contenedor de Redis de este proyecto
- * (`docker compose stop|start redis`). Requiere servidor corriendo y `npm run seed` reciente.
+ * (`docker compose stop|start redis`). Requiere servidor corriendo y `npm run seed:reset` reciente.
  */
 const { execSync } = require('child_process');
-const { io } = require('socket.io-client');
 const BASE = process.argv[2] ?? 'http://localhost:3000';
 
-const api = (method, path, employeeId, body) =>
-  fetch(BASE + path, {
-    method,
-    headers: { 'Content-Type': 'application/json', 'x-employee-id': employeeId },
-    body: body ? JSON.stringify(body) : undefined,
-  }).then(async (r) => ({ status: r.status, body: await r.json().catch(() => ({})) }));
+const { makeApi, listen } = require('./lib');
+const api = makeApi(BASE);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const sh = (cmd) => execSync(cmd, { cwd: process.cwd(), stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
 const psql = (sql) => sh(`docker compose exec -T postgres psql -U sitpverse -d sitpverse -tA -c "${sql}"`);
@@ -39,10 +34,7 @@ async function until(predicate, timeoutMs) {
 (async () => {
   const bus = (await api('GET', '/fleet/buses', '1001')).body[0].id;
 
-  const events = [];
-  const socket = io(`${BASE}/realtime`, { auth: { employeeId: '1001' }, transports: ['websocket'] });
-  socket.on('assistance:event', (e) => events.push(e));
-  await new Promise((resolve) => socket.on('identified', resolve));
+  const { socket, events } = await listen(BASE, '1001');
 
   try {
     console.log('… deteniendo Redis');

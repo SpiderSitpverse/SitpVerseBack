@@ -3,6 +3,8 @@ import { ConfigModule } from '@nestjs/config';
 import { AssistanceModule } from './modules/assistance/public';
 import { FleetModule } from './modules/fleet/public';
 import { IdentityModule } from './modules/identity/public';
+import { InspectionsModule } from './modules/inspections/public';
+import { UploadsModule } from './modules/uploads/public';
 import { RealtimeModule } from './realtime/realtime.module';
 import { SharedModule } from './shared/shared.module';
 
@@ -16,10 +18,12 @@ import { SharedModule } from './shared/shared.module';
     IdentityModule, // usuarios y control de acceso (guard global)
     FleetModule,
     AssistanceModule,
+    InspectionsModule,
+    UploadsModule,
 
     // Entrega por WebSocket de lo que los módulos publican en Redis
     RealtimeModule,
-    // Pendientes según el story map: InspectionsModule, ReportingModule
+    // Pendiente según el story map: ReportingModule (KPIs y dashboard)
   ],
 })
 export class AppModule {}

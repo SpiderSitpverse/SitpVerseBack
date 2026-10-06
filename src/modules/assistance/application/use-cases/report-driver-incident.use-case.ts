@@ -25,7 +25,7 @@ export class ReportDriverIncidentUseCase {
     if (!(await this.buses.exists(data.busId))) {
       throw new NotFoundError(`Bus ${data.busId} no encontrado`);
     }
-    return this.repo.createIncident({ ...data, reportedById: actor.id }, (incident) => [
+    return this.repo.createIncident({ ...data, reportedById: actor.id, reportedByName: actor.name }, (incident) => [
       assistanceEvent('incident.reported', traceId, { roles: ['ADMIN'] }, {
         incidentId: incident.id,
         busId: incident.busId,

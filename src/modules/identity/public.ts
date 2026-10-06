@@ -4,6 +4,7 @@
  * desde fuera del módulo rompe el build.)
  */
 export { IdentityModule } from './identity.module';
-export { AuthenticateEmployeeUseCase } from './application/authenticate-employee.use-case';
+export { AuthenticateTokenUseCase } from './application/authenticate-token.use-case';
+export { FindActiveUserUseCase } from './application/manage-users.use-cases';
 export { CurrentUser, Public, Roles } from './adapters/http/auth.decorators';
 export type { AuthenticatedUser } from './domain/models/authenticated-user';
