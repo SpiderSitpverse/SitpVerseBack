@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Ip, Post } from '@nestjs/common';
 import { IsString, MaxLength, MinLength } from 'class-validator';
 import { ChangeOwnPasswordUseCase } from '../../application/manage-users.use-cases';
 import { LoginUseCase } from '../../application/login.use-case';
@@ -26,12 +26,13 @@ export class AuthController {
    * HU-02: inicia sesión. Devuelve `{ accessToken, expiresIn, user }`.
    * El front guarda el token y lo envía en `Authorization: Bearer <token>` (HTTP)
    * y en `auth: { token }` al abrir el WebSocket.
+   * Tras varios intentos fallidos responde 429 con `Retry-After` (ver LoginAttemptLimiterPort).
    */
   @Post('login')
   @Public()
   @HttpCode(200)
-  signIn(@Body() body: LoginDto) {
-    return this.login.execute(body.employeeId, body.password);
+  signIn(@Body() body: LoginDto, @Ip() ip: string) {
+    return this.login.execute(body.employeeId, body.password, ip);
   }
 
   /** Quién soy según mi token (sirve para restaurar la sesión al recargar el front). */

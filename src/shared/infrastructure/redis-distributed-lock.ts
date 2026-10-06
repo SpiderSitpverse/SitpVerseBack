@@ -72,8 +72,8 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  * sección crítica excede `ttlMs`, su lease vence y la cola avanza (igual que el TTL de un
  * lock normal); la decisión real de consistencia sigue siendo el CAS de Postgres.
  *
- * Los scripts arman claves a partir de un prefijo (no solo `KEYS`), válido en un Redis
- * standalone. Para Redis Cluster habría que usar hash tags `{clave}`.
+ * Los scripts arman claves a partir de un prefijo (no solo `KEYS`). Todas comparten un hash tag
+ * `{clave}`, así funciona igual en un Redis standalone que en uno en clúster.
  */
 @Injectable()
 export class RedisDistributedLock implements DistributedLockPort {
@@ -84,8 +84,11 @@ export class RedisDistributedLock implements DistributedLockPort {
     fn: () => Promise<T>,
     { ttlMs = 5000, waitMs = 5000, traceId }: LockOptions = {},
   ): Promise<LockResult<T>> {
-    const keys = [`${key}:next`, `${key}:serving`];
-    const leasePrefix = `${key}:lease:`;
+    // Las llaves entre {} (hash tag) hacen que TODAS las claves de este lock vivan en el mismo slot:
+    // sin eso, en un Redis en clúster los scripts Lua que tocan varias claves fallan con CROSSSLOT.
+    const tag = `{${key}}`;
+    const keys = [`${tag}:next`, `${tag}:serving`];
+    const leasePrefix = `${tag}:lease:`;
     const requestedAt = Date.now();
 
     const ticket = Number(

@@ -7,6 +7,7 @@ import {
   ForbiddenError,
   InvalidInputError,
   NotFoundError,
+  TooManyRequestsError,
   UnauthorizedError,
 } from '../domain/errors';
 
@@ -14,6 +15,7 @@ const STATUS_BY_ERROR: [new (...args: never[]) => AppError, HttpStatus][] = [
   [NotFoundError, HttpStatus.NOT_FOUND],
   [ConflictError, HttpStatus.CONFLICT],
   [InvalidInputError, HttpStatus.BAD_REQUEST],
+  [TooManyRequestsError, HttpStatus.TOO_MANY_REQUESTS],
   [UnauthorizedError, HttpStatus.UNAUTHORIZED],
   [ForbiddenError, HttpStatus.FORBIDDEN],
   [BusyError, HttpStatus.SERVICE_UNAVAILABLE],
@@ -27,7 +29,11 @@ export class AppErrorFilter implements ExceptionFilter {
       STATUS_BY_ERROR.find(([type]) => error instanceof type)?.[1] ??
       HttpStatus.BAD_REQUEST;
 
-    host.switchToHttp().getResponse<Response>().status(status).json({
+    const response = host.switchToHttp().getResponse<Response>();
+    // Estándar HTTP: dice cuánto esperar antes de reintentar (el front puede mostrar una cuenta regresiva).
+    if (error instanceof TooManyRequestsError) response.setHeader('Retry-After', String(error.retryAfterSeconds));
+
+    response.status(status).json({
       statusCode: status,
       error: error.code,
       message: error.message,

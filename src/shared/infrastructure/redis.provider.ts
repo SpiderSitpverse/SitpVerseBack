@@ -1,6 +1,7 @@
 import { Logger, Provider } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis, { RedisOptions } from 'ioredis';
+import { buildRedisOptions, readRedisSettings } from './redis-connection';
 
 export const REDIS_PUBLISHER_CLIENT = Symbol('REDIS_PUBLISHER_CLIENT');
 export const REDIS_SUBSCRIBER_CLIENT = Symbol('REDIS_SUBSCRIBER_CLIENT');
@@ -18,11 +19,10 @@ function buildClient(
   config: ConfigService,
   options: RedisOptions = {},
 ): Redis {
-  const client = new Redis({
-    host: config.get<string>('REDIS_HOST', 'localhost'),
-    port: config.get<number>('REDIS_PORT', 6379),
-    ...options,
-  });
+  // Host, puerto, contraseña y TLS salen de las variables de entorno (ver redis-connection.ts).
+  const client = new Redis(
+    buildRedisOptions(readRedisSettings((key) => config.get<string>(key)), options),
+  );
   // Sin listener, un error de conexión tumba el proceso con "Unhandled error event".
   client.on('error', (err) => logger.error(`[${name}] ${err.message}`));
   return client;

@@ -1,5 +1,7 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // "native" = tu máquina (Windows/Mac/Linux); el otro es el motor para Azure App Service (Linux con OpenSSL 3)
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {

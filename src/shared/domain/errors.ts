@@ -59,3 +59,14 @@ export class InvalidInputError extends AppError {
     super(message, 'INVALID_INPUT', details);
   }
 }
+
+/** Demasiados intentos en poco tiempo (p. ej. contraseñas probadas a la fuerza). → 429 */
+export class TooManyRequestsError extends AppError {
+  constructor(
+    message: string,
+    /** Segundos que debe esperar el cliente antes de reintentar. */
+    readonly retryAfterSeconds: number,
+  ) {
+    super(message, 'TOO_MANY_REQUESTS', { retryAfterSeconds });
+  }
+}
