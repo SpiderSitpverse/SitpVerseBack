@@ -12,7 +12,27 @@ export interface BusProps {
   status: BusStatus;
   latitude?: number | null;
   longitude?: number | null;
+  /** Ficha del vehículo (registro de flota). */
+  model?: string | null;
+  year?: number | null;
+  operator?: string | null;
+  capacity?: number | null;
+  /** Referencia legible de dónde está (p. ej. "Calle 26"). */
+  locationLabel?: string | null;
+  /** Cuándo salió en su viaje actual (se fija en `startTrip`). */
+  tripStartedAt?: Date | null;
   updatedAt: Date;
+}
+
+/** Datos de la ficha que el administrador puede editar. */
+export interface BusDetails {
+  plate?: string;
+  route?: string;
+  model?: string | null;
+  year?: number | null;
+  operator?: string | null;
+  capacity?: number | null;
+  locationLabel?: string | null;
 }
 
 /**
@@ -72,6 +92,7 @@ export class Bus {
       throw new BusAlreadyInServiceError(this.props.plate);
     }
     this.props.status = BusStatus.IN_SERVICE;
+    this.props.tripStartedAt = new Date();
     this.props.updatedAt = new Date();
   }
 

@@ -12,6 +12,7 @@ import {
 import {
   AssistanceCallModel,
   AssistanceKind,
+  AssistanceSummary,
   CallStatus,
   CancelFailure,
   CancelResult,
@@ -20,6 +21,12 @@ import {
   ClaimResult,
   ClaimWithUser,
   CompleteResult,
+  IncidentInfo,
+  RepairExpense,
+  RepairReportInput,
+  RepairReportModel,
+  SaveReportFailure,
+  SaveReportResult,
 } from '../../domain/models/assistance.models';
 
 /** Fuerza el rollback de una transacción cuando se pierde una carrera de negocio. */
@@ -56,7 +63,7 @@ export class PrismaAssistanceRepository implements AssistanceRepositoryPort {
   // ─────────────── incidentes ───────────────
 
   async createIncident(
-    data: { busId: string; reportedById: string; type: string; description?: string },
+    data: { busId: string; reportedById: string; reportedByName?: string; type: string; description?: string },
     eventsOf: Parameters<AssistanceRepositoryPort['createIncident']>[1],
   ) {
     const incident = await this.prisma.$transaction(async (tx) => {
@@ -244,29 +251,143 @@ export class PrismaAssistanceRepository implements AssistanceRepositoryPort {
     callId: string,
     eventsOf: EventsOf<CompleteResult>,
   ): Promise<CompleteResult | null> {
-    const result = await this.prisma.$transaction(async (tx) => {
-      const cas = await tx.assistanceCall.updateMany({
-        where: { id: callId, status: { in: ['OPEN', 'FILLED'] } },
-        data: { status: 'COMPLETED', completedAt: new Date() },
-      });
-      if (cas.count === 0) return null; // otro "completar" ya ganó: no se paga dos veces
-
-      const call = (await tx.assistanceCall.findUnique({ where: { id: callId } }))!;
-      const claims = await tx.assistanceClaim.findMany({ where: { callId, status: 'ACTIVE' } });
-      const awardedUserIds = claims.map((c) => c.userId);
-
-      // Libro de puntos: UNIQUE (userId, callId) es una segunda defensa contra el pago doble.
-      await tx.rewardEntry.createMany({
-        data: awardedUserIds.map((userId) => ({ userId, callId, points: call.rewardPoints })),
-        skipDuplicates: true,
-      });
-
-      const done = { call, awardedUserIds };
-      await enqueueOutbox(tx, eventsOf(done).map(toMessage));
-      return done;
-    });
+    const result = await this.prisma.$transaction((tx) => this.completeWithin(tx, callId, eventsOf));
     if (result) this.relay.nudge();
     return result;
+  }
+
+  /**
+   * Cierra la alerta (una sola vez), acredita los puntos y encola el evento, DENTRO de la transacción
+   * recibida. Lo usan `complete` y `saveRepairReport` (que cierra la alerta al finalizar el informe).
+   */
+  private async completeWithin(
+    tx: Prisma.TransactionClient,
+    callId: string,
+    eventsOf: EventsOf<CompleteResult>,
+  ): Promise<CompleteResult | null> {
+    const cas = await tx.assistanceCall.updateMany({
+      where: { id: callId, status: { in: ['OPEN', 'FILLED'] } },
+      data: { status: 'COMPLETED', completedAt: new Date() },
+    });
+    if (cas.count === 0) return null; // otro "completar" ya ganó: no se paga dos veces
+
+    const call = (await tx.assistanceCall.findUnique({ where: { id: callId } }))!;
+    const claims = await tx.assistanceClaim.findMany({ where: { callId, status: 'ACTIVE' } });
+    const awardedUserIds = claims.map((c) => c.userId);
+
+    // Libro de puntos: UNIQUE (userId, callId) es una segunda defensa contra el pago doble.
+    await tx.rewardEntry.createMany({
+      data: awardedUserIds.map((userId) => ({ userId, callId, points: call.rewardPoints })),
+      skipDuplicates: true,
+    });
+
+    const done = { call, awardedUserIds };
+    await enqueueOutbox(tx, eventsOf(done).map(toMessage));
+    return done;
+  }
+
+  // ─────────────── informes de reparación ───────────────
+
+  async saveRepairReport(
+    callId: string,
+    mechanic: { id: string; name: string },
+    data: RepairReportInput,
+    finalize: boolean,
+    eventsOnComplete: EventsOf<CompleteResult>,
+  ): Promise<SaveReportResult> {
+    const fields = {
+      damages: data.damages,
+      replacedParts: data.replacedParts,
+      expenses: data.expenses as unknown as Prisma.InputJsonValue,
+      busPhotos: data.busPhotos,
+      partPhotos: data.partPhotos,
+    };
+    try {
+      const result = await this.prisma.$transaction(async (tx) => {
+        // 1) Crear el borrador o actualizarlo SOLO si sigue abierto (compare-and-set sobre completedAt).
+        const existing = await tx.repairReport.findUnique({ where: { callId } });
+        if (!existing) {
+          await tx.repairReport.create({
+            data: { callId, mechanicId: mechanic.id, mechanicName: mechanic.name, ...fields },
+          });
+        } else {
+          const updated = await tx.repairReport.updateMany({
+            where: { callId, completedAt: null },
+            data: fields,
+          });
+          if (updated.count === 0) throw new Abort<SaveReportFailure>('REPORT_FINALIZED');
+        }
+
+        // 2) Al finalizar: cerrar la alerta en la MISMA transacción (todo o nada).
+        let completion: CompleteResult | null = null;
+        if (finalize) {
+          completion = await this.completeWithin(tx, callId, eventsOnComplete);
+          if (!completion) throw new Abort<SaveReportFailure>('CALL_CLOSED'); // ya la cerró otro: se deshace todo
+          await tx.repairReport.update({ where: { callId }, data: { completedAt: new Date() } });
+        }
+
+        const report = (await tx.repairReport.findUnique({ where: { callId } }))!;
+        return { ok: true as const, report: this.toReport(report), completion };
+      });
+      if (result.completion) this.relay.nudge();
+      return result;
+    } catch (e) {
+      if (e instanceof Abort) return { ok: false, reason: e.reason as SaveReportFailure };
+      throw e;
+    }
+  }
+
+  async findRepairReport(callId: string): Promise<RepairReportModel | null> {
+    const row = await this.prisma.repairReport.findUnique({ where: { callId } });
+    return row ? this.toReport(row) : null;
+  }
+
+  async listRepairReports(filter: { mechanicId?: string }): Promise<RepairReportModel[]> {
+    const rows = await this.prisma.repairReport.findMany({
+      where: { mechanicId: filter.mechanicId },
+      orderBy: { updatedAt: 'desc' },
+    });
+    return rows.map((row) => this.toReport(row));
+  }
+
+  private toReport(row: {
+    id: string; callId: string; mechanicId: string; mechanicName: string; damages: string;
+    replacedParts: string; expenses: Prisma.JsonValue; busPhotos: Prisma.JsonValue;
+    partPhotos: Prisma.JsonValue; createdAt: Date; updatedAt: Date; completedAt: Date | null;
+  }): RepairReportModel {
+    return {
+      ...row,
+      expenses: row.expenses as unknown as RepairExpense[],
+      busPhotos: row.busPhotos as unknown as string[],
+      partPhotos: row.partPhotos as unknown as string[],
+    };
+  }
+
+  // ─────────────── datos para enriquecer y resumir ───────────────
+
+  async findIncidentInfos(ids: string[]): Promise<Map<string, IncidentInfo>> {
+    if (ids.length === 0) return new Map();
+    const rows = await this.prisma.driverIncident.findMany({ where: { id: { in: ids } } });
+    return new Map(
+      rows.map((r) => [
+        r.id,
+        { id: r.id, type: r.type, description: r.description, reportedByName: r.reportedByName, createdAt: r.createdAt },
+      ]),
+    );
+  }
+
+  async summary(): Promise<AssistanceSummary> {
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const [incidentsLast24h, openSupportCalls, openRepairCalls, repairsInProgress, repairsCompletedLast24h, openBlockages] =
+      await Promise.all([
+        this.prisma.driverIncident.count({ where: { createdAt: { gte: since } } }),
+        this.prisma.assistanceCall.count({ where: { kind: 'DRIVER_SUPPORT', status: { in: ['OPEN', 'FILLED'] } } }),
+        this.prisma.assistanceCall.count({ where: { kind: 'REPAIR', status: 'OPEN' } }),
+        this.prisma.assistanceCall.count({ where: { kind: 'REPAIR', status: 'FILLED' } }),
+        this.prisma.assistanceCall.count({ where: { kind: 'REPAIR', status: 'COMPLETED', completedAt: { gte: since } } }),
+        this.prisma.driverIncident.count({ where: { blockageStatus: 'OPEN' } }),
+      ]);
+    return { incidentsLast24h, openSupportCalls, openRepairCalls, repairsInProgress, repairsCompletedLast24h, openBlockages };
   }
 
   // ─────────────── eventos sueltos y puntos ───────────────

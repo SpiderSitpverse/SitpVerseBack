@@ -2,6 +2,11 @@ import { AssistanceEvent, EventsOf } from '../events/assistance-events';
 import {
   AssistanceCallModel,
   AssistanceKind,
+  AssistanceSummary,
+  IncidentInfo,
+  RepairReportInput,
+  RepairReportModel,
+  SaveReportResult,
   CallStatus,
   CancelResult,
   ClaimModel,
@@ -34,7 +39,7 @@ export interface NewCall {
  */
 export interface AssistanceRepositoryPort {
   createIncident(
-    data: { busId: string; reportedById: string; type: string; description?: string },
+    data: { busId: string; reportedById: string; reportedByName?: string; type: string; description?: string },
     eventsOf: EventsOf<DriverIncidentModel>,
   ): Promise<DriverIncidentModel>;
   findIncident(id: string): Promise<DriverIncidentModel | null>;
@@ -91,4 +96,26 @@ export interface AssistanceRepositoryPort {
 
   /** Saldo de puntos de un usuario (suma del libro). */
   getPoints(userId: string): Promise<number>;
+
+  /** Datos de varios incidentes de una vez (motivo, detalle, quién reportó) para enriquecer las alertas. */
+  findIncidentInfos(ids: string[]): Promise<Map<string, IncidentInfo>>;
+
+  /**
+   * Guarda el informe de reparación (borrador o definitivo) de forma ATÓMICA. Con `finalize`, en la
+   * misma transacción cierra la alerta y acredita los puntos (así no puede quedar un informe final
+   * con la alerta abierta, ni al revés). Un informe ya finalizado no admite cambios.
+   */
+  saveRepairReport(
+    callId: string,
+    mechanic: { id: string; name: string },
+    data: RepairReportInput,
+    finalize: boolean,
+    eventsOnComplete: EventsOf<CompleteResult>,
+  ): Promise<SaveReportResult>;
+  findRepairReport(callId: string): Promise<RepairReportModel | null>;
+  /** Informes de reparación, del más reciente al más antiguo. `mechanicId` limita a los de un mecánico. */
+  listRepairReports(filter: { mechanicId?: string }): Promise<RepairReportModel[]>;
+
+  /** Números para el panel del administrador. */
+  summary(): Promise<AssistanceSummary>;
 }

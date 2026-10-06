@@ -3,9 +3,8 @@
 Backend de **SitpVerse**: gestión operativa de flota TransMilenio con seguimiento en tiempo real y
 asignación concurrente de ayuda (apoyo de conductores y reparación de buses).
 
-> La API real de TransMilenio aún no está conectada. Buses y usuarios se siembran, las posiciones las
-> genera un feed simulado y el usuario se identifica con el header `x-employee-id`. Todo está aislado para
-> reemplazarlo sin tocar la lógica de negocio.
+> La API real de TransMilenio aún no está conectada. Buses y usuarios se siembran y las posiciones las
+> genera un feed simulado. Todo está aislado para reemplazarlo sin tocar la lógica de negocio.
 
 ---
 
@@ -45,9 +44,11 @@ asignación concurrente de ayuda (apoyo de conductores y reparación de buses).
 ```
 src/
 ├── modules/
-│   ├── identity/      usuarios, autenticación, guard global de roles
-│   ├── fleet/         buses, conductor asignado, posición en tiempo real
-│   └── assistance/    alertas con cupos, aceptaciones, puntos
+│   ├── identity/      login, usuarios (alta, edición, desactivación), guard global de roles
+│   ├── fleet/         buses y su ficha, conductor asignado, posición en tiempo real
+│   ├── assistance/    alertas con cupos, aceptaciones, puntos, informes de reparación
+│   ├── inspections/   inspección previa al viaje con fotos (inmutable)
+│   └── uploads/       subida de fotos
 │       ├── domain/          reglas puras y "ports" (interfaces)
 │       ├── application/     casos de uso (uno por archivo)
 │       ├── infrastructure/  adapters de salida: Prisma, otros módulos
@@ -86,23 +87,40 @@ Un test (`architecture.spec.ts`) falla si alguien las rompe:
 
 ## Funcionamiento
 
-### Roles y acceso
+### Acceso: login, roles y usuarios de demostración
 
-Un guard global protege todas las rutas: sin `x-employee-id` válido responde 401, y una ruta sin rol
-declarado se rechaza (falla cerrado). Además, un conductor solo ve y opera **su** bus.
+Se inicia sesión con **número de empleado y contraseña** y se recibe un token JWT:
 
-| Rol | Puede |
-|---|---|
-| **ADMIN** | Ver y operar todos los buses; recibir incidentes; lanzar, cancelar, reenviar y cerrar alertas |
-| **DRIVER** | Operar su bus; reportar imprevistos; aceptar alertas de apoyo |
-| **MECHANICAL** | Ver buses; aceptar reparaciones y completarlas |
+```
+POST /auth/login   { "employeeId": "2001", "password": "Sitp2026!" }
+→ { "accessToken": "...", "expiresIn": 28800, "user": { "id", "employeeId", "name", "role" } }
+```
 
-Usuarios del seed: admin `1001`/`1002`, conductores `2001`–`2005`, mecánicos `3001`–`3003`.
+El token viaja en `Authorization: Bearer <token>` (HTTP) y en `auth: { token }` al abrir el WebSocket.
+`GET /auth/me` devuelve quién eres según el token. Un guard global protege todas las rutas: sin token
+válido responde 401, y una ruta sin rol declarado se rechaza (falla cerrado). Las contraseñas se guardan
+cifradas (bcrypt) y el rol se lee de la base de datos en cada petición.
+
+| Rol | Usuarios (contraseña `Sitp2026!`) | Puede |
+|---|---|---|
+| **ADMIN** | `1001` a `1005` | Ver y operar todos los buses y el mapa en vivo; recibir incidentes; lanzar, cancelar, reenviar y cerrar alertas; rutas alternativas y grúas |
+| **DRIVER** | `2001` a `2005` (cada uno con su bus `TMX-001`…`TMX-005`) | Operar su bus y enviar su ubicación; reportar incidentes y bloqueos; subir fotos; aceptar alertas de apoyo y rutas alternativas |
+| **MECHANICAL** | `3001` a `3005` | Ver buses y el mapa en vivo; subir fotos; aceptar reparaciones y completarlas |
+
+`npm run seed` crea o actualiza estos 15 usuarios y 5 buses **sin borrar nada**; `npm run seed:reset` vacía la
+base de datos y la siembra de nuevo (solo desarrollo). La contraseña sale de `SEED_PASSWORD`: cámbiala si la
+base es visible fuera del equipo. Un conductor solo ve y opera **su** bus.
+
+**Fotos:** `POST /files/images` (multipart, campo `photo`, JPEG/PNG/WebP hasta 5 MB) devuelve una URL `/uploads/<id>.<ext>`
+que luego se envía en inspecciones e informes; el archivo se valida por su contenido y se guarda con nombre aleatorio.
+La evidencia de incidentes se sube con `POST /assistance/incidents/:id/evidence/upload`.
+
+**Para conectar el front:** ver [`docs/API.md`](docs/API.md) (pantalla por pantalla, tipos, WebSocket y fotos).
 
 ### Flota (`fleet`)
 
 Cada bus pasa por `IDLE → IN_SERVICE → FINISHED`. Las posiciones se guardan y se emiten por WebSocket a
-todos los clientes.
+administradores y mecánicos autenticados (el conductor las envía con `PATCH /fleet/buses/:id/position`).
 
 | Ruta | Descripción |
 |---|---|

@@ -7,7 +7,7 @@ import {
   AssistanceRepositoryPort,
 } from '../../domain/ports/assistance-repository.port';
 import { assertCanComplete } from '../../domain/assistance.policy';
-import { assistanceEvent } from '../assistance-event.factory';
+import { callCompletedEvents } from '../assistance-event.factory';
 
 /**
  * Cierra el servicio y acredita los puntos (recompensa de apoyo / bono por bus reparado).
@@ -32,20 +32,9 @@ export class CompleteCallUseCase {
     }
     assertCanComplete(call, actor, activeClaims);
 
-    const done = await this.repo.complete(callId, ({ awardedUserIds }) => [
-      assistanceEvent(
-        'call.completed',
-        traceId,
-        { roles: ['ADMIN'], userIds: awardedUserIds },
-        {
-          callId,
-          kind: call.kind,
-          busId: call.busId,
-          rewardPoints: call.rewardPoints,
-          awardedUserIds,
-        },
-      ),
-    ]);
+    const done = await this.repo.complete(callId, ({ call: closed, awardedUserIds }) =>
+      callCompletedEvents(traceId, closed, awardedUserIds),
+    );
     if (!done) throw new ConflictError('La alerta ya fue completada');
 
     return {

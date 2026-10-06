@@ -9,6 +9,8 @@ export interface DriverIncidentModel {
   id: string;
   busId: string;
   reportedById: string;
+  /** Nombre de quien reportó, copiado al crear el incidente. */
+  reportedByName: string | null;
   type: string;
   description: string | null;
   status: IncidentReportStatus;
@@ -55,9 +57,80 @@ export interface ClaimView extends ClaimWithUser {
   overdue: boolean;
 }
 
+/** Datos del bus que las pantallas muestran junto a cada alerta (vienen de `fleet`). */
+export interface BusInfo {
+  id: string;
+  plate: string;
+  /** Troncal o ruta. */
+  route: string;
+  locationLabel: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  driverName: string | null;
+}
+
+/** Datos del incidente que originó una alerta de apoyo (motivo, detalle y quién lo reportó). */
+export interface IncidentInfo {
+  id: string;
+  type: string;
+  description: string | null;
+  reportedByName: string | null;
+  createdAt: Date;
+}
+
 export interface CallView extends AssistanceCallModel {
   /** Admin: todas las aceptaciones. Conductor/mecánico: solo la suya. */
   claims: ClaimView[];
+  bus: BusInfo | null;
+  /** Solo en las alertas de apoyo de conductores. */
+  incident: IncidentInfo | null;
+}
+
+export interface RepairExpense {
+  concepto: string;
+  valor: number;
+}
+
+/**
+ * Informe del mecánico sobre una reparación. Es un borrador (editable) hasta que se finaliza;
+ * al finalizar (`completedAt`) queda definitivo y cierra la alerta.
+ */
+export interface RepairReportModel {
+  id: string;
+  callId: string;
+  mechanicId: string;
+  mechanicName: string;
+  damages: string;
+  replacedParts: string;
+  expenses: RepairExpense[];
+  busPhotos: string[];
+  partPhotos: string[];
+  createdAt: Date;
+  updatedAt: Date;
+  completedAt: Date | null;
+}
+
+export interface RepairReportInput {
+  damages: string;
+  replacedParts: string;
+  expenses: RepairExpense[];
+  busPhotos: string[];
+  partPhotos: string[];
+}
+
+export type SaveReportFailure = 'REPORT_FINALIZED' | 'CALL_CLOSED';
+
+export type SaveReportResult =
+  | { ok: true; report: RepairReportModel; completion: CompleteResult | null }
+  | { ok: false; reason: SaveReportFailure };
+
+export interface AssistanceSummary {
+  incidentsLast24h: number;
+  openSupportCalls: number;
+  openRepairCalls: number;
+  repairsInProgress: number;
+  repairsCompletedLast24h: number;
+  openBlockages: number;
 }
 
 /** Rol que debe poder aceptar cada tipo de alerta. */

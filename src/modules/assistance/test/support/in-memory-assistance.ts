@@ -10,6 +10,12 @@ import { BusDirectoryPort, BusRef } from '../../domain/ports/bus-directory.port'
 import {
   AssistanceCallModel,
   AssistanceKind,
+  AssistanceSummary,
+  BusInfo,
+  IncidentInfo,
+  RepairReportInput,
+  RepairReportModel,
+  SaveReportResult,
   CallStatus,
   CancelResult,
   ClaimModel,
@@ -32,11 +38,12 @@ const tick = () => new Promise<void>((resolve) => setImmediate(resolve));
  */
 export class InMemoryAssistanceRepository implements AssistanceRepositoryPort {
   users = new Map<string, AuthenticatedUser>();
-  buses = new Map<string, BusRef & { driverId: string | null }>();
+  buses = new Map<string, BusRef & { driverId: string | null; route?: string; locationLabel?: string }>();
   incidents = new Map<string, DriverIncidentModel>();
   calls = new Map<string, AssistanceCallModel>();
   claims: ClaimModel[] = [];
   rewards: { userId: string; callId: string; points: number }[] = [];
+  reports = new Map<string, RepairReportModel>(); // callId -> informe
   outbox: AssistanceEvent[] = [];
 
   // ── fixtures ──
@@ -62,7 +69,7 @@ export class InMemoryAssistanceRepository implements AssistanceRepositoryPort {
 
   // ── incidentes ──
   async createIncident(
-    data: { busId: string; reportedById: string; type: string; description?: string },
+    data: { busId: string; reportedById: string; reportedByName?: string; type: string; description?: string },
     eventsOf: EventsOf<DriverIncidentModel>,
   ) {
     await tick();
@@ -70,6 +77,7 @@ export class InMemoryAssistanceRepository implements AssistanceRepositoryPort {
       id: randomUUID(),
       busId: data.busId,
       reportedById: data.reportedById,
+      reportedByName: data.reportedByName ?? null,
       type: data.type,
       description: data.description ?? null,
       status: 'REPORTED',
@@ -243,6 +251,85 @@ export class InMemoryAssistanceRepository implements AssistanceRepositoryPort {
     return done;
   }
 
+  async findIncidentInfos(ids: string[]): Promise<Map<string, IncidentInfo>> {
+    await tick();
+    return new Map(
+      ids.flatMap((id) => {
+        const i = this.incidents.get(id);
+        return i
+          ? [[id, { id, type: i.type, description: i.description, reportedByName: i.reportedByName, createdAt: i.createdAt }] as const]
+          : [];
+      }),
+    );
+  }
+
+  async saveRepairReport(
+    callId: string,
+    mechanic: { id: string; name: string },
+    data: RepairReportInput,
+    finalize: boolean,
+    eventsOnComplete: EventsOf<CompleteResult>,
+  ): Promise<SaveReportResult> {
+    await tick();
+    // --- sección atómica (sin await): informe + cierre de la alerta, todo o nada ---
+    const existing = this.reports.get(callId);
+    if (existing?.completedAt) return { ok: false, reason: 'REPORT_FINALIZED' };
+
+    const call = this.calls.get(callId);
+    if (finalize && (!call || call.status === 'COMPLETED')) return { ok: false, reason: 'CALL_CLOSED' };
+
+    const now = new Date();
+    const report: RepairReportModel = existing
+      ? { ...existing, ...data, updatedAt: now }
+      : {
+          id: randomUUID(), callId, mechanicId: mechanic.id, mechanicName: mechanic.name,
+          ...data, createdAt: now, updatedAt: now, completedAt: null,
+        };
+
+    let completion: CompleteResult | null = null;
+    if (finalize) {
+      call!.status = 'COMPLETED';
+      call!.completedAt = now;
+      const awardedUserIds = this.claims.filter((c) => c.callId === callId && c.status === 'ACTIVE').map((c) => c.userId);
+      for (const userId of awardedUserIds) {
+        if (!this.rewards.some((r) => r.userId === userId && r.callId === callId)) {
+          this.rewards.push({ userId, callId, points: call!.rewardPoints });
+        }
+      }
+      completion = { call: { ...call! }, awardedUserIds };
+      this.publish(eventsOnComplete, completion);
+      report.completedAt = now;
+    }
+    this.reports.set(callId, report);
+    return { ok: true, report: { ...report }, completion };
+  }
+
+  async findRepairReport(callId: string) {
+    await tick();
+    const r = this.reports.get(callId);
+    return r ? { ...r } : null;
+  }
+
+  async listRepairReports(filter: { mechanicId?: string }) {
+    await tick();
+    return [...this.reports.values()]
+      .filter((r) => !filter.mechanicId || r.mechanicId === filter.mechanicId)
+      .map((r) => ({ ...r }));
+  }
+
+  async summary(): Promise<AssistanceSummary> {
+    await tick();
+    const calls = [...this.calls.values()];
+    return {
+      incidentsLast24h: this.incidents.size,
+      openSupportCalls: calls.filter((c) => c.kind === 'DRIVER_SUPPORT' && c.status !== 'COMPLETED').length,
+      openRepairCalls: calls.filter((c) => c.kind === 'REPAIR' && c.status === 'OPEN').length,
+      repairsInProgress: calls.filter((c) => c.kind === 'REPAIR' && c.status === 'FILLED').length,
+      repairsCompletedLast24h: calls.filter((c) => c.kind === 'REPAIR' && c.status === 'COMPLETED').length,
+      openBlockages: 0,
+    };
+  }
+
   async enqueueEvents(events: AssistanceEvent[]) {
     await tick();
     this.outbox.push(...events);
@@ -270,5 +357,21 @@ export class FakeBusDirectory implements BusDirectoryPort {
   async findBusOfDriver(userId: string) {
     await tick();
     return [...this.repo.buses.values()].find((b) => b.driverId === userId) ?? null;
+  }
+
+  /** Describe buses a partir de los fixtures (placa, troncal, ubicación...). */
+  async describe(busIds: string[]): Promise<Map<string, BusInfo>> {
+    await tick();
+    return new Map(
+      busIds.flatMap((id) => {
+        const b = this.repo.buses.get(id);
+        return b
+          ? [[id, {
+              id, plate: b.plate, route: b.route ?? 'Troncal Caracas', locationLabel: b.locationLabel ?? 'Calle 26',
+              latitude: 4.6, longitude: -74.08, driverName: null,
+            }] as const]
+          : [];
+      }),
+    );
   }
 }

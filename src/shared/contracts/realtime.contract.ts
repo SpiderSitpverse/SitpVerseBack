@@ -24,6 +24,8 @@ export const SOCKET_EVENTS = {
   ASSISTANCE: 'assistance:event',
   /** El servidor confirma que el socket quedó asociado a un usuario y a las salas de su rol. */
   IDENTIFIED: 'identified',
+  /** El token es inválido o venció: el servidor desconecta el socket; el front debe volver al login. */
+  UNAUTHORIZED: 'unauthorized',
 } as const;
 
 /** A quién se entrega un evento: salas `role:<ROL>` y `user:<id>`. */

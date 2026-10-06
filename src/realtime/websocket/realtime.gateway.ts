@@ -15,20 +15,24 @@ import {
   userRoom,
 } from '../../shared/contracts/realtime.contract';
 import { OutboxReader } from '../../shared/infrastructure/outbox/outbox.reader';
-import { AuthenticatedUser, AuthenticateEmployeeUseCase } from '../../modules/identity/public';
+import { AuthenticatedUser, AuthenticateTokenUseCase } from '../../modules/identity/public';
 import type { BusPositionEvent } from '../../modules/fleet/public';
+
+/** Quién ve el mapa de la flota en tiempo real: administración y mecánicos (el conductor no). */
+const FLEET_MAP_ROLES = ['ADMIN', 'MECHANICAL'];
 
 /**
  * Único punto de salida WebSocket (namespace `/realtime`). Sin lógica de negocio:
  * solo reenvía lo que le entregan los consumidores de Redis.
  *
- *  - Posiciones de flota → broadcast a todos los clientes.
+ *  - Posiciones de flota → solo a administradores y mecánicos autenticados.
  *  - Alertas → solo a las salas de su audiencia (`role:X`, `user:Y`).
  *
- * Un cliente se identifica con `io(url + '/realtime', { auth: { employeeId, lastSeq } })`.
+ * Un cliente se autentica con `io(url + '/realtime', { auth: { token, lastSeq } })`, donde
+ * `token` es el `accessToken` de `POST /auth/login`. Sin token válido se le desconecta.
  * `lastSeq` (opcional) es el mayor `seq` que ya vio: al reconectarse el servidor le
- * REPRODUCE las alertas que ocurrieron mientras estuvo desconectado. Sin identificarse
- * recibe flota pero ninguna alerta dirigida. El CORS lo define RealtimeIoAdapter.
+ * REPRODUCE las alertas que ocurrieron mientras estuvo desconectado.
+ * El CORS lo define RealtimeIoAdapter.
  */
 @WebSocketGateway({ namespace: 'realtime' })
 export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect {
@@ -38,16 +42,18 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   server: Server;
 
   constructor(
-    private readonly authenticate: AuthenticateEmployeeUseCase,
+    private readonly authenticate: AuthenticateTokenUseCase,
     private readonly outbox: OutboxReader,
   ) {}
 
   async handleConnection(client: Socket) {
-    const { employeeId, lastSeq } = this.credentialsOf(client);
+    const { token, lastSeq } = this.credentialsOf(client);
     try {
-      const user = await this.authenticate.execute(employeeId);
+      const user = await this.authenticate.execute(token);
       if (!user) {
-        this.logger.log(`Cliente anónimo conectado: ${client.id}`);
+        this.logger.warn(`Conexión rechazada (token ausente o inválido): ${client.id}`);
+        client.emit(SOCKET_EVENTS.UNAUTHORIZED, { message: 'Token ausente, inválido o vencido' });
+        client.disconnect(true);
         return;
       }
       client.join([roleRoom(user.role), userRoom(user.id)]);
@@ -65,7 +71,7 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   broadcastPositionUpdate(event: BusPositionEvent) {
-    this.server.emit(SOCKET_EVENTS.FLEET_POSITION, event);
+    this.server.to(FLEET_MAP_ROLES.map(roleRoom)).emit(SOCKET_EVENTS.FLEET_POSITION, event);
   }
 
   broadcastToAudience(event: AudienceEvent) {
@@ -89,11 +95,12 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     }
   }
 
-  private credentialsOf(client: Socket): { employeeId?: string; lastSeq?: bigint } {
-    const source = { ...client.handshake.query, ...client.handshake.auth };
-    const lastSeq = String(source.lastSeq ?? '');
+  /** El token solo se acepta en `auth` (no en la URL, donde quedaría en los logs de los proxies). */
+  private credentialsOf(client: Socket): { token?: string; lastSeq?: bigint } {
+    const auth = client.handshake.auth ?? {};
+    const lastSeq = String(auth.lastSeq ?? '');
     return {
-      employeeId: typeof source.employeeId === 'string' ? source.employeeId : undefined,
+      token: typeof auth.token === 'string' ? auth.token : undefined,
       lastSeq: /^\d+$/.test(lastSeq) ? BigInt(lastSeq) : undefined,
     };
   }

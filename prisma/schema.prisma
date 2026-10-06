@@ -19,11 +19,15 @@ enum UserRole {
 
 // Usuario mínimo: el login real (JWT) llegará después; hoy se identifica por employeeId.
 model User {
-  id         String   @id @default(uuid())
-  employeeId String   @unique
-  name       String
-  role       UserRole
-  createdAt  DateTime @default(now())
+  id           String   @id @default(uuid())
+  employeeId   String   @unique
+  name         String
+  role         UserRole
+  // Hash bcrypt de la contraseña: NUNCA se guarda ni se devuelve en texto plano.
+  passwordHash String
+  // Una cuenta desactivada no puede iniciar sesión y su token deja de valer, pero se conserva su historial.
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
 
   bus     Bus?              @relation("BusDriver")
   claims  AssistanceClaim[]
@@ -52,6 +56,15 @@ model Bus {
   status         BusStatus @default(IDLE)
   latitude       Float?
   longitude      Float?
+  // Ficha del vehículo (registro de flota)
+  model          String?
+  year           Int?
+  operator       String?
+  capacity       Int?
+  // Referencia legible de dónde está (p. ej. "Calle 26", "Patio Portal Norte")
+  locationLabel  String?
+  // Cuándo salió el bus en su viaje actual (el mapa y el inicio del conductor muestran "salió 14:32")
+  tripStartedAt  DateTime?
   updatedAt      DateTime  @updatedAt
   createdAt      DateTime  @default(now())
 
@@ -105,6 +118,8 @@ model DriverIncident {
   id             String               @id @default(uuid())
   busId          String
   reportedById   String
+  // Nombre de quien reportó, copiado al crear el incidente (la pantalla de ayudas lo muestra sin consultar usuarios)
+  reportedByName String?
   type           String
   description    String?
   status         IncidentReportStatus @default(REPORTED)
@@ -195,7 +210,8 @@ model AssistanceCall {
   createdAt    DateTime       @default(now())
   completedAt  DateTime?
 
-  claims AssistanceClaim[]
+  claims       AssistanceClaim[]
+  repairReport RepairReport?
 
   @@index([kind, status])
   @@map("assistance_calls")
@@ -256,4 +272,46 @@ model OutboxEvent {
   publishedAt DateTime?
 
   @@map("outbox_events")
+}
+
+// Informe del mecánico sobre una reparación (alerta REPAIR). Se guarda como borrador cuantas veces
+// quiera y se cierra al finalizar: `completedAt` lo marca como definitivo y ya no admite cambios.
+model RepairReport {
+  id            String         @id @default(uuid())
+  callId        String         @unique
+  call          AssistanceCall @relation(fields: [callId], references: [id], onDelete: Cascade)
+  mechanicId    String
+  mechanicName  String
+  damages       String         @default("")
+  replacedParts String         @default("")
+  expenses      Json           @default("[]") // [{ concepto, valor }]
+  busPhotos     Json           @default("[]") // URLs de /uploads
+  partPhotos    Json           @default("[]")
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  completedAt   DateTime?
+
+  @@index([mechanicId, completedAt])
+  @@map("repair_reports")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INSPECTIONS — dueño: modules/inspections
+// Inspección previa al viaje con fotos. Inmutable: no se edita ni se borra (trazabilidad).
+// ═══════════════════════════════════════════════════════════════════════════
+
+model BusInspection {
+  id            String   @id @default(uuid())
+  busId         String
+  inspectorId   String
+  inspectorName String
+  inspectorRole UserRole
+  note          String
+  comment       String?
+  photos        Json     @default("[]") // URLs de /uploads
+  createdAt     DateTime @default(now())
+
+  @@index([busId, createdAt])
+  @@index([inspectorId, createdAt])
+  @@map("bus_inspections")
 }
