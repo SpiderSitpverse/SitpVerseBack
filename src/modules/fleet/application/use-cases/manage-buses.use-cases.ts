@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { InvalidInputError, NotFoundError } from '../../../../shared/domain/errors';
+import { isUploadedImageUrl } from '../../../../shared/domain/file-storage.port';
 import { Bus, BusDetails } from '../../domain/entities/bus.entity';
 import { BUS_REPOSITORY, BusRepositoryPort } from '../../domain/ports/bus-repository.port';
 import { DRIVER_DIRECTORY, DriverDirectoryPort } from '../../domain/ports/driver-directory.port';
@@ -16,7 +17,15 @@ function normalizePlate(plate: string): string {
   return normalized;
 }
 
+/** Solo se aceptan fotos que subió este mismo back (nada de URLs externas ni rutas arbitrarias). */
+function assertUploadedPhoto(photoUrl: string | null | undefined) {
+  if (typeof photoUrl === 'string' && !isUploadedImageUrl(photoUrl)) {
+    throw new InvalidInputError('La foto debe ser una imagen subida con POST /files/images');
+  }
+}
+
 function clean(details: BusDetails): BusDetails {
+  assertUploadedPhoto(details.photoUrl);
   return {
     ...details,
     plate: details.plate === undefined ? undefined : normalizePlate(details.plate),

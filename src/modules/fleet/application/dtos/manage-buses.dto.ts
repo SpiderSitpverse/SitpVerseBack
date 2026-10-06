@@ -19,6 +19,8 @@ export class UpdateBusDto {
   @IsOptional() @IsString() @MaxLength(80) operator?: string;
   @IsOptional() @IsInt() @Min(1) @Max(500) capacity?: number;
   @IsOptional() @IsString() @MaxLength(120) locationLabel?: string;
+  /** URL de una foto subida con `POST /files/images`, o `null` para quitarla. La valida el caso de uso. */
+  @IsOptional() @IsString() @MaxLength(120) photoUrl?: string | null;
 }
 
 export class AssignDriverDto {

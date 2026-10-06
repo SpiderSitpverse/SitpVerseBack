@@ -21,6 +21,7 @@ import {
   ClaimResult,
   ClaimWithUser,
   CompleteResult,
+  DeleteIncidentResult,
   IncidentInfo,
   RepairExpense,
   RepairReportInput,
@@ -81,6 +82,40 @@ export class PrismaAssistanceRepository implements AssistanceRepositoryPort {
 
   listIncidents() {
     return this.prisma.driverIncident.findMany({ orderBy: { createdAt: 'desc' } });
+  }
+
+  async deleteIncident(
+    id: string,
+    eventsOf: EventsOf<{ id: string; busId: string }>,
+  ): Promise<DeleteIncidentResult> {
+    try {
+      const result = await this.prisma.$transaction(async (tx) => {
+        const incident = await tx.driverIncident.findUnique({ where: { id } });
+        if (!incident) throw new Abort<'NOT_FOUND'>('NOT_FOUND');
+
+        // Bloquea las alertas del incidente: un conductor que acepte ahora espera y, al desbloquearse,
+        // su UPDATE ya no encuentra la fila (no queda ninguna aceptación huérfana).
+        const locked = await tx.$queryRaw<{ id: string; status: string; claimedCount: number }[]>`
+          SELECT "id", "status", "claimedCount" FROM "assistance_calls"
+           WHERE "incidentId" = ${id} FOR UPDATE`;
+        if (locked.some((c) => c.claimedCount > 0 || c.status !== 'OPEN')) {
+          throw new Abort<'IN_PROGRESS'>('IN_PROGRESS');
+        }
+
+        // `incidentId` de la alerta no tiene clave foránea: se borran aparte (sin aceptaciones que arrastrar).
+        await tx.assistanceCall.deleteMany({ where: { incidentId: id } });
+        await tx.driverIncident.delete({ where: { id } });
+
+        const ok = { ok: true as const, busId: incident.busId, removedCalls: locked.length };
+        await enqueueOutbox(tx, eventsOf({ id, busId: incident.busId }).map(toMessage));
+        return ok;
+      });
+      this.relay.nudge();
+      return result;
+    } catch (e) {
+      if (e instanceof Abort) return { ok: false, reason: e.reason as 'NOT_FOUND' | 'IN_PROGRESS' };
+      throw e;
+    }
   }
 
   // ─────────────── alertas ───────────────

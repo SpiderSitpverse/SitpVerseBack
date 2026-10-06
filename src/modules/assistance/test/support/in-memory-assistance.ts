@@ -22,6 +22,7 @@ import {
   ClaimResult,
   ClaimWithUser,
   CompleteResult,
+  DeleteIncidentResult,
   DriverIncidentModel,
 } from '../../domain/models/assistance.models';
 
@@ -97,6 +98,18 @@ export class InMemoryAssistanceRepository implements AssistanceRepositoryPort {
   async listIncidents() {
     await tick();
     return [...this.incidents.values()].map((i) => ({ ...i }));
+  }
+
+  async deleteIncident(id: string, eventsOf: EventsOf<{ id: string; busId: string }>): Promise<DeleteIncidentResult> {
+    await tick();
+    const incident = this.incidents.get(id);
+    if (!incident) return { ok: false, reason: 'NOT_FOUND' };
+    const calls = [...this.calls.values()].filter((c) => c.incidentId === id);
+    if (calls.some((c) => c.claimedCount > 0 || c.status !== 'OPEN')) return { ok: false, reason: 'IN_PROGRESS' };
+    for (const call of calls) this.calls.delete(call.id);
+    this.incidents.delete(id);
+    this.publish(eventsOf, { id, busId: incident.busId });
+    return { ok: true, busId: incident.busId, removedCalls: calls.length };
   }
 
   // ── alertas ──
