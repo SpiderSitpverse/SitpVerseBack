@@ -102,6 +102,31 @@ async function upload(token) {
   const still = (await call('GET', '/assistance/incidents', admin)).data.some((i) => i.id === inc3.id);
   check('el incidente sigue existiendo', still);
 
+  // solicitud de reparación enviada desde el incidente: se borra con él
+  const mech = await login('3001');
+  const incR = (await call('POST', '/assistance/incidents', drivers[0], { busId: myBus, type: 'FALLA' })).data;
+  const fault = await call('POST', '/assistance/bus-faults', admin, { busId: myBus, incidentId: incR.id, description: 'motor' });
+  check('el admin envía la solicitud al mecánico desde el incidente', fault.status === 201 && fault.data.call.incidentId === incR.id, JSON.stringify(fault.data.call && fault.data.call.incidentId));
+  const delR = await call('DELETE', `/assistance/incidents/${incR.id}`, admin);
+  check('al eliminar el incidente se elimina la solicitud al mecánico', delR.status === 200 && delR.data.removedCalls === 1, JSON.stringify(delR.data));
+  const repairsLeft = (await call('GET', '/assistance/calls', mech)).data.filter((c) => c.id === fault.data.call.id);
+  check('el mecánico ya no la ve', repairsLeft.length === 0);
+
+  // si el mecánico ya la aceptó: 409 y no se borra nada
+  const incR2 = (await call('POST', '/assistance/incidents', drivers[0], { busId: myBus, type: 'FALLA' })).data;
+  const fault2 = (await call('POST', '/assistance/bus-faults', admin, { busId: myBus, incidentId: incR2.id })).data;
+  const accR = await call('POST', `/assistance/calls/${fault2.call.id}/accept`, mech);
+  check('el mecánico acepta la reparación', accR.status === 200 || accR.status === 201, `status ${accR.status}`);
+  const delR2 = await call('DELETE', `/assistance/incidents/${incR2.id}`, admin);
+  check('con el mecánico trabajando → 409', delR2.status === 409, `status ${delR2.status}`);
+  const stillRepair = (await call('GET', '/assistance/calls', mech)).data.some((c) => c.id === fault2.call.id);
+  check('la reparación en curso sigue ahí', stillRepair);
+  // limpieza: el admin cancela la aceptación y elimina
+  await call('POST', `/assistance/calls/${fault2.call.id}/complete`, admin);
+
+  const badInc = await call('POST', '/assistance/bus-faults', admin, { busId: myBus, incidentId: '00000000-0000-4000-8000-000000000000' });
+  check('solicitud con un incidente inexistente → 404', badInc.status === 404, `status ${badInc.status}`);
+
   // ── 3. Carrera aceptar vs eliminar ──
   let deletedWins = 0, acceptWins = 0, orphan = 0, unexpected = 0;
   for (let i = 0; i < ROUNDS; i++) {

@@ -158,7 +158,7 @@ Quien acepta tiene **20 minutos** para llegar (`arriveBy`); si no llega, el admi
 
 | Acción | Endpoint |
 |---|---|
-| Generar una solicitud de reparación | `POST /assistance/bus-faults` `{ busId, description }` (conductor o admin) |
+| Generar una solicitud de reparación | `POST /assistance/bus-faults` `{ busId, description, incidentId? }` (conductor o admin). Con `incidentId` queda ligada al incidente: al eliminarlo con `DELETE /assistance/incidents/:id` (solo admin) se elimina también, siempre que ningún mecánico la haya aceptado (si no, 409) |
 | Ver solicitudes pendientes | `GET /assistance/calls?status=OPEN` → las de `kind: "REPAIR"` |
 | Aceptar una solicitud | `POST /assistance/calls/:id/accept` (solo gana el primero; los demás reciben 409) |
 | Guardar el informe (borrador) | `PUT /assistance/calls/:id/repair-report` |

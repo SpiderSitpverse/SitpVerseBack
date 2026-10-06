@@ -152,9 +152,12 @@ export class InMemoryAssistanceRepository implements AssistanceRepositoryPort {
       const open = [...this.calls.values()].find(
         (c) => c.kind === 'REPAIR' && c.busId === data.busId && c.status !== 'COMPLETED',
       ); // equivale al índice único parcial
-      if (open) return { call: { ...open }, created: false };
+      if (open) {
+        if (data.incidentId && open.incidentId === null) open.incidentId = data.incidentId;
+        return { call: { ...open }, created: false };
+      }
     }
-    const call = this.newCall(data, null);
+    const call = this.newCall(data, data.incidentId ?? null);
     this.publish(eventsOf, call);
     return { call: { ...call }, created: true };
   }

@@ -159,6 +159,15 @@ export class PrismaAssistanceRepository implements AssistanceRepositoryPort {
       const existing = await this.prisma.assistanceCall.findFirstOrThrow({
         where: { busId: data.busId, kind: 'REPAIR', status: { not: 'COMPLETED' } },
       });
+      // Si esa reparación no venía de ningún incidente, queda enlazada al que la pide ahora
+      // (así, al eliminar ese incidente, se elimina también la solicitud).
+      if (data.incidentId && existing.incidentId === null) {
+        await this.prisma.assistanceCall.updateMany({
+          where: { id: existing.id, incidentId: null },
+          data: { incidentId: data.incidentId },
+        });
+        return { call: { ...existing, incidentId: data.incidentId }, created: false };
+      }
       return { call: existing, created: false };
     }
   }
