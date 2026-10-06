@@ -18,4 +18,4 @@ dist/
 coverage/
 
 # fotos de evidencia subidas por los usuarios
-uploads/
+/uploads/
