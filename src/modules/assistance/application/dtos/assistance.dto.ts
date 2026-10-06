@@ -22,6 +22,8 @@ export class SupportCallDto {
 
 export class BusFaultDto {
   @IsUUID() busId: string;
+  /** Incidente que originó la solicitud: si se elimina el incidente, esta solicitud se elimina con él. */
+  @IsOptional() @IsUUID() incidentId?: string;
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsInt() @Min(0) rewardPoints?: number;
 }

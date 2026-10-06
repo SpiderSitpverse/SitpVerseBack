@@ -32,11 +32,14 @@ export class ReportBusFaultUseCase {
 
   async execute(
     actor: AuthenticatedUser,
-    data: { busId: string; description?: string; rewardPoints?: number },
+    data: { busId: string; incidentId?: string; description?: string; rewardPoints?: number },
     traceId = randomUUID(),
   ) {
     if (!(await this.buses.exists(data.busId))) {
       throw new NotFoundError(`Bus ${data.busId} no encontrado`);
+    }
+    if (data.incidentId && !(await this.repo.findIncident(data.incidentId))) {
+      throw new NotFoundError(`Incidente ${data.incidentId} no encontrado`);
     }
 
     // Solo la alerta realmente nueva genera evento: los mecánicos no reciben duplicados.
@@ -44,6 +47,7 @@ export class ReportBusFaultUseCase {
       {
         kind: 'REPAIR',
         busId: data.busId,
+        incidentId: data.incidentId,
         slots: 1,
         rewardPoints:
           data.rewardPoints ??

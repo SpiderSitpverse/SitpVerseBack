@@ -20,8 +20,9 @@ export class DeleteIncidentUseCase {
 
   async execute(incidentId: string, traceId = randomUUID()) {
     const result = await this.repo.deleteIncident(incidentId, (deleted) => [
-      // Admin y conductores refrescan sus listas (las alertas sin atender de ese incidente desaparecen).
-      assistanceEvent('incident.deleted', traceId, { roles: ['ADMIN', 'DRIVER'] }, {
+      // Admin, conductores y mecánicos refrescan sus listas (las alertas de apoyo y las solicitudes de
+      // reparación sin atender de ese incidente desaparecen).
+      assistanceEvent('incident.deleted', traceId, { roles: ['ADMIN', 'DRIVER', 'MECHANICAL'] }, {
         incidentId: deleted.id,
         busId: deleted.busId,
       }),

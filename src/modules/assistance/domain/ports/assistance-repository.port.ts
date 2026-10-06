@@ -22,6 +22,8 @@ export const ASSISTANCE_REPOSITORY = Symbol('ASSISTANCE_REPOSITORY');
 export interface NewCall {
   kind: AssistanceKind;
   busId: string;
+  /** Incidente del que nace la alerta (la solicitud de reparación enviada desde un incidente). */
+  incidentId?: string;
   slots: number;
   rewardPoints: number;
   createdById: string;
