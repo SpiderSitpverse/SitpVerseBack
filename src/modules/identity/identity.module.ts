@@ -13,6 +13,7 @@ import {
   ResetPasswordUseCase,
   UpdateUserUseCase,
 } from './application/manage-users.use-cases';
+import { LOGIN_ATTEMPT_LIMITER } from './domain/ports/login-attempt-limiter.port';
 import { PASSWORD_HASHER } from './domain/ports/password-hasher.port';
 import { TOKEN_SERVICE } from './domain/ports/token-service.port';
 import { USER_ADMIN_REPOSITORY } from './domain/ports/user-admin-repository.port';
@@ -20,6 +21,7 @@ import { USER_DIRECTORY } from './domain/ports/user-directory.port';
 import { PrismaUserDirectory } from './infrastructure/prisma/prisma-user-directory';
 import { BcryptPasswordHasher } from './infrastructure/security/bcrypt-password-hasher';
 import { JwtTokenService } from './infrastructure/security/jwt-token-service';
+import { RedisLoginAttemptLimiter } from './infrastructure/security/redis-login-attempt-limiter';
 
 /**
  * Identidad y control de acceso. Dueño de la tabla `users`.
@@ -41,6 +43,7 @@ import { JwtTokenService } from './infrastructure/security/jwt-token-service';
     { provide: USER_ADMIN_REPOSITORY, useExisting: PrismaUserDirectory },
     { provide: PASSWORD_HASHER, useClass: BcryptPasswordHasher },
     { provide: TOKEN_SERVICE, useClass: JwtTokenService },
+    { provide: LOGIN_ATTEMPT_LIMITER, useClass: RedisLoginAttemptLimiter },
     { provide: APP_GUARD, useClass: AuthGuard },
   ],
   exports: [AuthenticateTokenUseCase, FindActiveUserUseCase],

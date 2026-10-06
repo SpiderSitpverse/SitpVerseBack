@@ -1,0 +1,54 @@
+# Despliegue a Azure App Service. Se ejecuta al hacer push a `main` (o a mano desde la pestaña Actions).
+#
+# Requiere en GitHub (Settings → Secrets and variables → Actions):
+#   Secret   AZURE_WEBAPP_PUBLISH_PROFILE   contenido del "perfil de publicación" del App Service (portal → Get publish profile)
+#   Variable AZURE_WEBAPP_NAME              nombre del App Service (p. ej. sitpverse-api)
+# La configuración (base de datos, Redis, JWT_SECRET, CORS...) vive en los "Application settings" del App Service,
+# NUNCA en el repositorio. Guía completa: docs/DEPLOY.md
+name: Deploy a Azure
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false # un despliegue en curso no se interrumpe
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      # Solo se despliega lo que compila y pasa las pruebas
+      - run: npx tsc --noEmit -p .
+      - run: npm test
+      - run: npm run build
+
+      # Se compila AQUÍ (Linux) y se sube ya construido: el servidor no instala ni compila nada.
+      - name: Dejar solo dependencias de producción y regenerar el cliente de Prisma
+        run: |
+          npm prune --omit=dev
+          npx prisma generate
+
+      - name: Armar el paquete
+        run: |
+          mkdir deploy
+          cp -r dist node_modules prisma package.json package-lock.json deploy/
+
+      - uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.AZURE_WEBAPP_NAME }}
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: deploy

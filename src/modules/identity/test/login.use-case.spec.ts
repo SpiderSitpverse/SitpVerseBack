@@ -47,7 +47,7 @@ function build() {
     hasherCalls,
     storedHash,
     tokens,
-    login: new LoginUseCase(directory, hasher, tokens),
+    login: new LoginUseCase(directory, hasher, tokens, { assertNotBlocked: async () => {}, recordFailure: async () => {}, recordSuccess: async () => {} }),
     authenticate: new AuthenticateTokenUseCase(tokens, directory),
   };
 }

@@ -13,8 +13,20 @@ const prisma = new PrismaClient();
  * La contraseña de todos los usuarios de demostración sale de SEED_PASSWORD
  * (por defecto "Sitp2026!"). Cámbiala si la base es visible fuera del equipo.
  */
-const PASSWORD = process.env.SEED_PASSWORD ?? 'Sitp2026!';
+const PRODUCTION = process.env.NODE_ENV === 'production';
 const RESET = process.argv.includes('--reset');
+
+// En producción NUNCA se siembra con la contraseña por defecto (está escrita en el repositorio): hay que
+// elegir una. Y borrar todo exige una confirmación explícita, para que un comando mal copiado no vacíe la base real.
+if (PRODUCTION && !process.env.SEED_PASSWORD) {
+  console.error('En producción define SEED_PASSWORD con la contraseña que tendrán los usuarios de demostración.');
+  process.exit(1);
+}
+if (PRODUCTION && RESET && process.env.CONFIRM_ERASE_EVERYTHING !== 'yes') {
+  console.error('seed:reset BORRA TODA la base de datos. En producción exige CONFIRM_ERASE_EVERYTHING=yes.');
+  process.exit(1);
+}
+const PASSWORD = process.env.SEED_PASSWORD ?? 'Sitp2026!';
 
 interface Demo {
   employeeId: string;

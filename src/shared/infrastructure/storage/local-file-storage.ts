@@ -1,9 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { mkdir, unlink, writeFile } from 'fs/promises';
-import { basename, join, resolve } from 'path';
+import { basename, join } from 'path';
 import { FileStoragePort, ImageType } from '../../domain/file-storage.port';
+import { resolveUploadsDir, uploadsDirWarning } from './uploads-dir';
 
 export const UPLOADS_URL_PREFIX = '/uploads';
 
@@ -15,15 +16,18 @@ const EXTENSION: Record<ImageType, string> = { jpeg: 'jpg', png: 'png', webp: 'w
  * El nombre es un UUID aleatorio generado aquí (nunca el que manda el cliente): evita
  * sobrescribir archivos y que alguien adivine o recorra rutas (path traversal).
  *
- * Límite conocido: en App Service el disco solo persiste dentro de `/home`; para producción
- * seria conviene Azure Blob Storage (reemplazando solo este adapter).
+ * En Azure App Service la carpeta es `/home/uploads` automáticamente (ver uploads-dir.ts): `/home` es el único
+ * disco que persiste. Para algo más serio conviene Azure Blob Storage (se reemplaza solo este adapter).
  */
 @Injectable()
 export class LocalFileStorage implements FileStoragePort {
   readonly directory: string;
 
   constructor(config: ConfigService) {
-    this.directory = resolve(config.get<string>('UPLOADS_DIR', 'uploads'));
+    const read = (key: string) => config.get<string>(key);
+    this.directory = resolveUploadsDir(read);
+    const warning = uploadsDirWarning(this.directory, read);
+    if (warning) new Logger(LocalFileStorage.name).warn(warning);
   }
 
   async saveImage(buffer: Buffer, type: ImageType): Promise<{ url: string }> {

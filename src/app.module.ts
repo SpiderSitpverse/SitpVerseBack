@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AssistanceModule } from './modules/assistance/public';
 import { FleetModule } from './modules/fleet/public';
+import { HealthModule } from './modules/health/public';
 import { IdentityModule } from './modules/identity/public';
 import { InspectionsModule } from './modules/inspections/public';
 import { UploadsModule } from './modules/uploads/public';
@@ -20,6 +21,7 @@ import { SharedModule } from './shared/shared.module';
     AssistanceModule,
     InspectionsModule,
     UploadsModule,
+    HealthModule,
 
     // Entrega por WebSocket de lo que los módulos publican en Redis
     RealtimeModule,

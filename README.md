@@ -318,3 +318,13 @@ Tests: 7 suites, 58 tests passed
 Prisma validate: PASS
 Prisma format: PASS
 ```
+
+---
+
+## Más documentación
+
+- [`docs/API.md`](docs/API.md): guía para conectar el front (endpoints por pantalla, tipos, WebSocket y fotos).
+- [`docs/DEPLOY.md`](docs/DEPLOY.md): despliegue en Azure paso a paso, con la configuración y cómo resolver fallos.
+
+Pruebas: `npm test` (unitarias y de arquitectura), `npm run loadtest` y `npm run loadtest:front|access|security|outbox`
+(contra el servidor real). En cada Pull Request las corre GitHub Actions (`.github/workflows/ci.yml`).
