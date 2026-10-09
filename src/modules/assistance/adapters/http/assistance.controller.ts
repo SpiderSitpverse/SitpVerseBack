@@ -89,6 +89,13 @@ export class AssistanceController {
     return this.routing.assignTow(user.id, { ...body, incidentId });
   }
 
+  /** HU-30/HU-50 — terminar el servicio de grúa: libera la grúa y la cuadrilla. */
+  @Post('tow-assignments/:id/complete')
+  @Roles('ADMIN')
+  completeTow(@Param('id', ParseUUIDPipe) assignmentId: string) {
+    return this.routing.completeTow(assignmentId);
+  }
+
   /** HU-22 — adjuntar evidencia fotográfica al incidente. */
   @Post('incidents/:id/evidence')
   @Roles('DRIVER', 'ADMIN', 'MECHANICAL')

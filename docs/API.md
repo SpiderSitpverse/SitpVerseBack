@@ -189,10 +189,67 @@ PUT /assistance/calls/<id>/repair-report
 
 ### Bloqueos, rutas alternativas y grúas (`IncidentsPage`)
 
-Los gestiona `assistance`: `GET/POST /assistance/blockages`, `POST /assistance/blockages/:id/alert`,
-`POST /assistance/blockages/:id/tow`, `GET/POST /assistance/incidents/:id/routes`,
-`POST /assistance/routes/:routeId/assign` y `…/accept`, `GET /assistance/routes/assigned/me`,
-`GET /assistance/tow-reports`. Cada ruta indica sus roles en el código del controlador.
+Los gestiona `assistance`. Un **bloqueo** es un incidente (`DriverIncident`); de él cuelgan sus rutas
+alternativas, sus grúas y sus fotos. En todas las rutas con `:id`, ese `:id` es el **id del incidente**
+(salvo donde se indica otra cosa).
+
+| Quién | Acción | Endpoint |
+|---|---|---|
+| Conductor, Admin | Reportar un bloqueo (HU-16) | `POST /assistance/blockages` `{ busId, type, description? }` |
+| Todos | Listar bloqueos, cada uno con `alternativeRoutes` y `towAssignments` (HU-45) | `GET /assistance/blockages` |
+| Admin | Avisar el bloqueo a **todos los conductores** (HU-44) | `POST /assistance/blockages/:id/alert` → `{ sent: true, incidentId }` |
+| Admin | Proponer una ruta alternativa dibujada en el mapa (HU-47) | `POST /assistance/incidents/:id/routes` `{ name, geometry }` (formato abajo) |
+| Todos | Ver las rutas alternativas de un incidente (HU-46) | `GET /assistance/incidents/:id/routes` |
+| Admin | Asignar la ruta a un conductor (HU-47) | `POST /assistance/routes/:routeId/assign` `{ driverId }` → 409 si ya fue aceptada |
+| Conductor | Ver mis rutas asignadas (HU-48) | `GET /assistance/routes/assigned/me` |
+| Conductor | Aceptar la ruta asignada (HU-17, HU-52) | `POST /assistance/routes/:routeId/accept` → 409 si no es tuya o ya no está disponible |
+| Admin | Asignar grúa y cuadrilla (HU-30) | `POST /assistance/blockages/:id/tow` `{ towTruck, crew }` |
+| Admin | Terminar el servicio de grúa y **liberar** grúa y cuadrilla | `POST /assistance/tow-assignments/:assignmentId/complete` |
+| Admin | Listado de grúas y cuadrillas (HU-50) | `GET /assistance/tow-reports?towTruck=&crew=&incidentId=&status=&from=&to=&take=&skip=` |
+| Todos | Adjuntar evidencia fotográfica (HU-22) | `POST /assistance/incidents/:id/evidence` `{ url, caption?, capturedAt? }` · o subir y asociar en un paso: `POST /assistance/incidents/:id/evidence/upload` (multipart, campo `photo`) |
+| Todos | Ver la evidencia de un incidente | `GET /assistance/incidents/:id/evidence` |
+
+`driverId` de `assign` es el **id de usuario** del conductor. En un bus, sale de `bus.driverId` (es `null` si el
+bus no tiene conductor: en ese caso el front debe deshabilitar "asignar").
+
+#### Formato de la ruta alternativa
+
+```json
+POST /assistance/incidents/<id>/routes
+{ "name": "Desvío por la calle 26", "geometry": [[4.6097, -74.0817], [4.6120, -74.0790], [4.6155, -74.0751]] }
+```
+
+- Cada punto es **`[latitud, longitud]`**, el mismo orden de Leaflet: `geometry` se pasa tal cual a
+  `<Polyline positions={geometry} />`. **No** es GeoJSON (que usa `[longitud, latitud]`).
+- De 2 a 2000 puntos. Latitud entre -90 y 90, longitud entre -180 y 180, solo números.
+- `name` obligatorio (hasta 120 caracteres).
+- Si algo falla, responde **400** y dice qué punto marcar:
+
+```json
+{ "statusCode": 400, "error": "INVALID_INPUT", "message": "Punto 2 inválido: la latitud debe estar entre -90 y 90",
+  "reason": "INVALID_GEOMETRY", "index": 2 }
+```
+
+- Ojo: si el front mandara `[lng, lat]` por error, los valores de Bogotá (`-74.08`, `4.60`) **caben** en rango y el
+  back no puede detectarlo: la ruta se dibujaría en otro lugar del mapa. Compruébalo con una ruta de prueba.
+
+#### Grúas y cuadrillas: no se pueden asignar dos veces
+
+Una grúa (o cuadrilla) con un servicio **activo** (`ASSIGNED` o `IN_PROGRESS`) no se puede asignar a otro incidente:
+
+```json
+POST /assistance/blockages/<id>/tow   { "towTruck": "G-01", "crew": "Cuadrilla Norte" }
+→ 201 { "id", "incidentId", "busId", "towTruck": "G-01", "crew": "CUADRILLA NORTE", "status": "ASSIGNED", … }
+→ 409 { "reason": "TOW_TRUCK_BUSY", "assignmentId": "…", "incidentId": "…", "message": "La grúa G-01 ya está asignada a un servicio activo" }
+→ 409 { "reason": "CREW_BUSY", … }
+```
+
+- Los nombres se guardan en **mayúsculas y sin espacios sobrantes**: `g-01`, ` G-01 ` y `G-01` son la misma grúa.
+- `towTruck` y `crew`: obligatorios, hasta 60 caracteres.
+- Si dos administradores asignan la misma grúa a la vez, solo uno lo logra; el otro recibe el 409.
+- La grúa vuelve a estar libre con `POST /assistance/tow-assignments/:assignmentId/complete` (409 `ALREADY_COMPLETED`
+  si ya estaba terminada), o al eliminar el incidente.
+- `reason` y `assignmentId` permiten mostrar "la grúa G-01 está en otro servicio" y llevar a ese incidente.
 
 ---
 
@@ -284,6 +341,18 @@ socket.on("assistance:event", (e) => {
 | `call.closed` | el rol de la alerta + ADMIN | Se llenaron los cupos: **deshabilitar** la notificación |
 | `claim.cancelled` | ADMIN + el cancelado | El admin canceló una aceptación vencida |
 | `call.completed` | ADMIN + quienes cobran | Servicio cerrado y puntos acreditados |
+| `incident.deleted` | ADMIN, DRIVER, MECHANICAL | `{ incidentId, busId }`. El admin eliminó un incidente: refrescar las listas |
+| `blockage.reported` | ADMIN | `{ incidentId, busId }`. Un conductor reportó un bloqueo |
+| `blockage.alerted` | DRIVER | `{ incidentId, busId, type, description }`. El admin avisó del bloqueo a la flota: **mostrar la alerta** (HU-16, HU-44) |
+| `incident.evidence.attached` | ADMIN, DRIVER, MECHANICAL | `{ incidentId, evidenceId, busId, url }`. Se adjuntó una foto al incidente |
+| `route.proposed` | ADMIN, DRIVER | `{ routeId, incidentId, name, geometry }`. Hay una ruta alternativa: **dibujarla en el mapa** (HU-46). `geometry` es `[[lat, lng], …]` |
+| `route.assigned` | el conductor asignado + ADMIN | `{ routeId, incidentId, driverId }`. Al conductor: "te asignaron una ruta" (HU-48) |
+| `route.accepted` | ADMIN + el conductor | `{ routeId, incidentId, driverId }`. El conductor aceptó la ruta |
+| `tow.assigned` | ADMIN, DRIVER, MECHANICAL | `{ assignmentId, incidentId, busId }`. Se asignó grúa y cuadrilla |
+| `tow.completed` | ADMIN, DRIVER, MECHANICAL | `{ assignmentId, incidentId, busId, towTruck, crew }`. Terminó el servicio: grúa y cuadrilla quedaron libres |
+
+Los eventos de bloqueos, rutas y grúas llevan solo ids (salvo `route.proposed`, que trae el trazado): para el
+detalle, vuelve a llamar al `GET` correspondiente.
 
 Los datos de las pantallas siempre se pueden recuperar con los `GET` (al abrir la pantalla y al reconectar);
 los eventos sirven para que se actualicen solas sin recargar. Un hook que reemplace a `fleetActivityClient` /

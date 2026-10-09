@@ -7,7 +7,16 @@ export type AssistanceEventType =
   | 'call.progress' // cambió el número de aceptaciones (para administración)
   | 'call.closed' // cupos completos: se deshabilita la notificación
   | 'claim.cancelled' // el admin canceló una aceptación (no llegó a tiempo): libera el cupo
-  | 'call.completed'; // servicio terminado y puntos acreditados
+  | 'call.completed' // servicio terminado y puntos acreditados
+  // --- bloqueos, rutas alternativas, grúas y evidencia (RoutingService) ---
+  | 'blockage.reported' // un conductor reportó un bloqueo → ADMIN
+  | 'blockage.alerted' // el admin avisó del bloqueo a la flota → DRIVER
+  | 'incident.evidence.attached' // se adjuntó una foto a un incidente
+  | 'tow.assigned' // se asignó grúa y cuadrilla a un incidente
+  | 'tow.completed' // terminó el servicio de grúa: grúa y cuadrilla quedan libres
+  | 'route.proposed' // el admin dibujó una ruta alternativa
+  | 'route.assigned' // el admin asignó la ruta a un conductor
+  | 'route.accepted'; // el conductor aceptó la ruta asignada
 
 export interface AssistanceEvent extends AudienceEvent {
   type: AssistanceEventType;

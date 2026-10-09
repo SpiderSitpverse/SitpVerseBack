@@ -1,16 +1,20 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../../../../shared/infrastructure/prisma.service';
 import { OutboxRelay } from '../../../../shared/infrastructure/outbox/outbox.relay';
 import { enqueueOutbox } from '../../../../shared/infrastructure/outbox/outbox.writer';
 import { REDIS_STREAMS } from '../../../../shared/contracts/realtime.contract';
-import { ConflictError, NotFoundError } from '../../../../shared/domain/errors';
+import { ConflictError, InvalidInputError, NotFoundError } from '../../../../shared/domain/errors';
+import { AssistanceEventType } from '../../domain/events/assistance-events';
+import { parseRouteGeometry } from '../../domain/route-geometry';
+import { ACTIVE_TOW_STATUSES, normalizeResourceName } from '../../domain/tow-resources';
 
 @Injectable()
 export class RoutingService {
   constructor(private readonly prisma: PrismaService, private readonly relay: OutboxRelay) {}
 
-  private async event(type: string, payload: Record<string, unknown>, audience: object) {
+  private async event(type: AssistanceEventType, payload: Record<string, unknown>, audience: object) {
     const eventId = randomUUID();
     return { eventId, channel: REDIS_STREAMS.ASSISTANCE, payload: {
       eventId, type, traceId: randomUUID(), occurredAt: new Date().toISOString(), audience, payload,
@@ -35,17 +39,97 @@ export class RoutingService {
     return incident;
   }
 
+  /**
+   * HU-30: asignar grúa y cuadrilla a un incidente.
+   *
+   * Una grúa (o cuadrilla) no puede estar en dos servicios activos a la vez. Revisar y luego
+   * insertar NO es atómico: dos administradores que asignan la misma grúa al mismo tiempo
+   * pasarían ambos la revisión. Por eso, dentro de la transacción, se toma un lock de Postgres
+   * por recurso (`pg_advisory_xact_lock`): el segundo espera al primero, ve la grúa ocupada y
+   * recibe 409. El lock se libera solo al terminar la transacción y vale entre instancias.
+   */
   async assignTow(actorId: string, data: { incidentId: string; towTruck: string; crew: string }) {
+    const towTruck = normalizeResourceName(data.towTruck);
+    const crew = normalizeResourceName(data.crew);
+    if (!towTruck || !crew) throw new InvalidInputError('La grúa y la cuadrilla no pueden estar vacías');
+
     const result = await this.prisma.$transaction(async (tx) => {
       const incident = await tx.driverIncident.findUnique({ where: { id: data.incidentId } });
       if (!incident) throw new NotFoundError(`Incidente ${data.incidentId} no encontrado`);
-      const assignment = await tx.towAssignment.create({ data: { ...data, busId: incident.busId, assignedById: actorId } });
+
+      // Orden fijo (grúa y luego cuadrilla) para que dos peticiones nunca se bloqueen entre sí.
+      await this.lockResource(tx, 'tow-truck', towTruck);
+      await this.lockResource(tx, 'tow-crew', crew);
+
+      const activeStatus = { in: [...ACTIVE_TOW_STATUSES] };
+      const truckBusy = await tx.towAssignment.findFirst({
+        where: { towTruck: { equals: towTruck, mode: 'insensitive' }, status: activeStatus },
+        select: { id: true, incidentId: true },
+      });
+      if (truckBusy) {
+        throw new ConflictError(`La grúa ${towTruck} ya está asignada a un servicio activo`, {
+          reason: 'TOW_TRUCK_BUSY',
+          assignmentId: truckBusy.id,
+          incidentId: truckBusy.incidentId,
+        });
+      }
+      const crewBusy = await tx.towAssignment.findFirst({
+        where: { crew: { equals: crew, mode: 'insensitive' }, status: activeStatus },
+        select: { id: true, incidentId: true },
+      });
+      if (crewBusy) {
+        throw new ConflictError(`La cuadrilla ${crew} ya está asignada a un servicio activo`, {
+          reason: 'CREW_BUSY',
+          assignmentId: crewBusy.id,
+          incidentId: crewBusy.incidentId,
+        });
+      }
+
+      const assignment = await tx.towAssignment.create({
+        data: { incidentId: incident.id, towTruck, crew, busId: incident.busId, assignedById: actorId },
+      });
       const event = await this.event('tow.assigned', { assignmentId: assignment.id, incidentId: incident.id, busId: incident.busId }, { roles: ['ADMIN', 'DRIVER', 'MECHANICAL'] });
       await enqueueOutbox(tx, [event]);
       return assignment;
     });
     this.relay.nudge();
     return result;
+  }
+
+  /**
+   * HU-30/HU-50: terminar el servicio de grúa y liberar la grúa y la cuadrilla.
+   * Sin esto, una grúa asignada quedaría ocupada para siempre (ver `assignTow`).
+   */
+  async completeTow(assignmentId: string) {
+    const result = await this.prisma.$transaction(async (tx) => {
+      const assignment = await tx.towAssignment.findUnique({ where: { id: assignmentId } });
+      if (!assignment) throw new NotFoundError(`Asignación ${assignmentId} no encontrada`);
+
+      // Atómico: si dos peticiones llegan a la vez, solo una cambia el estado (count = 1).
+      const { count } = await tx.towAssignment.updateMany({
+        where: { id: assignmentId, status: { in: [...ACTIVE_TOW_STATUSES] } },
+        data: { status: 'COMPLETED', completedAt: new Date() },
+      });
+      if (count === 0) {
+        throw new ConflictError('El servicio de grúa ya estaba completado', { reason: 'ALREADY_COMPLETED' });
+      }
+
+      const completed = await tx.towAssignment.findUniqueOrThrow({ where: { id: assignmentId } });
+      const event = await this.event(
+        'tow.completed',
+        { assignmentId, incidentId: completed.incidentId, busId: completed.busId, towTruck: completed.towTruck, crew: completed.crew },
+        { roles: ['ADMIN', 'DRIVER', 'MECHANICAL'] },
+      );
+      await enqueueOutbox(tx, [event]);
+      return completed;
+    });
+    this.relay.nudge();
+    return result;
+  }
+
+  /** Lock de Postgres por (tipo, nombre); dura lo que la transacción. */
+  private async lockResource(tx: Prisma.TransactionClient, kind: string, name: string) {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${kind}), hashtext(${name}))`;
   }
 
   async attachEvidence(
@@ -133,10 +217,15 @@ export class RoutingService {
   }
 
   async createRoute(actorId: string, incidentId: string, data: { name: string; geometry: unknown[] }) {
+    // Se valida ANTES de abrir la transacción: un trazado inválido nunca llega a la base ni a la flota.
+    const geometry = parseRouteGeometry(data.geometry);
+    const name = data.name.trim();
+    if (!name) throw new InvalidInputError('La ruta necesita un nombre');
+
     const result = await this.prisma.$transaction(async (tx) => {
       const incident = await tx.driverIncident.findUnique({ where: { id: incidentId } });
       if (!incident) throw new NotFoundError(`Incidente ${incidentId} no encontrado`);
-      const route = await tx.alternativeRoute.create({ data: { incidentId, name: data.name, geometry: data.geometry as object } });
+      const route = await tx.alternativeRoute.create({ data: { incidentId, name, geometry } });
       const event = await this.event('route.proposed', { routeId: route.id, incidentId, name: route.name, geometry: route.geometry }, { roles: ['ADMIN', 'DRIVER'] });
       await enqueueOutbox(tx, [event]);
       return route;
