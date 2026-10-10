@@ -36,7 +36,8 @@ export class JwtTokenService implements TokenServicePort {
     if (!configured) {
       this.logger.warn('JWT_SECRET no definido: usando un secreto de DESARROLLO. No lo uses en producción.');
     }
-    this.secret = configured ?? DEV_SECRET;
+    // `||` y no `??`: `.env.example` trae `JWT_SECRET=` vacío, que llega como '' (no como undefined).
+    this.secret = configured || DEV_SECRET;
     this.expiresIn = config.get<string>('JWT_EXPIRES_IN', '8h');
   }
 
