@@ -90,8 +90,20 @@ export class PrismaAssistanceRepository implements AssistanceRepositoryPort {
   ): Promise<DeleteIncidentResult> {
     try {
       const result = await this.prisma.$transaction(async (tx) => {
-        const incident = await tx.driverIncident.findUnique({ where: { id } });
-        if (!incident) throw new Abort<'NOT_FOUND'>('NOT_FOUND');
+        // Bloquea el incidente: quien intente colgarle ahora una grúa o una ruta (inserción con clave foránea)
+        // espera a que termine este borrado, así la revisión de abajo no se queda vieja.
+        const found = await tx.$queryRaw<{ busId: string }[]>`
+          SELECT "busId" FROM "driver_incidents" WHERE "id" = ${id} FOR UPDATE`;
+        if (found.length === 0) throw new Abort<'NOT_FOUND'>('NOT_FOUND');
+        const incident = { busId: found[0].busId };
+
+        // Una grúa en servicio o una ruta alternativa que un conductor tiene asignada o aceptó SE BORRARÍAN en
+        // cascada con el incidente: la grúa quedaría libre en pleno servicio y el conductor sin su desvío.
+        const [activeTows, liveRoutes] = await Promise.all([
+          tx.towAssignment.count({ where: { incidentId: id, status: { in: ['ASSIGNED', 'IN_PROGRESS'] } } }),
+          tx.alternativeRoute.count({ where: { incidentId: id, status: { in: ['ASSIGNED', 'ACCEPTED'] } } }),
+        ]);
+        if (activeTows > 0 || liveRoutes > 0) throw new Abort<'IN_PROGRESS'>('IN_PROGRESS');
 
         // Bloquea las alertas del incidente: un conductor que acepte ahora espera y, al desbloquearse,
         // su UPDATE ya no encuentra la fila (no queda ninguna aceptación huérfana).

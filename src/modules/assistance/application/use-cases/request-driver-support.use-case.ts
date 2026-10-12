@@ -43,6 +43,7 @@ export class RequestDriverSupportUseCase {
       (created) => [
         assistanceEvent('call.opened', traceId, { roles: ['DRIVER'] }, {
           callId: created.id,
+          incidentId: created.incidentId ?? incident.id,
           kind: created.kind,
           busId: created.busId,
           slots: created.slots,

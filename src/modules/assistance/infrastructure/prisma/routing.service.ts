@@ -6,6 +6,7 @@ import { OutboxRelay } from '../../../../shared/infrastructure/outbox/outbox.rel
 import { enqueueOutbox } from '../../../../shared/infrastructure/outbox/outbox.writer';
 import { REDIS_STREAMS } from '../../../../shared/contracts/realtime.contract';
 import { ConflictError, InvalidInputError, NotFoundError } from '../../../../shared/domain/errors';
+import { isUploadedImageUrl } from '../../../../shared/domain/file-storage.port';
 import { AssistanceEventType } from '../../domain/events/assistance-events';
 import { parseRouteGeometry } from '../../domain/route-geometry';
 import { ACTIVE_TOW_STATUSES, normalizeResourceName } from '../../domain/tow-resources';
@@ -54,7 +55,11 @@ export class RoutingService {
     if (!towTruck || !crew) throw new InvalidInputError('La grúa y la cuadrilla no pueden estar vacías');
 
     const result = await this.prisma.$transaction(async (tx) => {
-      const incident = await tx.driverIncident.findUnique({ where: { id: data.incidentId } });
+      // FOR SHARE: si el admin está eliminando ese incidente en este instante, se espera a que termine y se
+      // responde 404 (en vez de un error de clave foránea al insertar la asignación).
+      const rows = await tx.$queryRaw<{ id: string; busId: string }[]>`
+        SELECT "id", "busId" FROM "driver_incidents" WHERE "id" = ${data.incidentId} FOR SHARE`;
+      const incident = rows[0];
       if (!incident) throw new NotFoundError(`Incidente ${data.incidentId} no encontrado`);
 
       // Orden fijo (grúa y luego cuadrilla) para que dos peticiones nunca se bloqueen entre sí.
@@ -137,6 +142,10 @@ export class RoutingService {
     incidentId: string,
     data: { url: string; caption?: string; capturedAt?: string },
   ) {
+    // Solo imágenes subidas a este mismo back (no direcciones externas que los demás cargarían al ver el incidente).
+    if (!isUploadedImageUrl(data.url)) {
+      throw new InvalidInputError('La evidencia debe ser una imagen subida con POST /files/images');
+    }
     const result = await this.prisma.$transaction(async (tx) => {
       const incident = await tx.driverIncident.findUnique({ where: { id: incidentId } });
       if (!incident) throw new NotFoundError(`Incidente ${incidentId} no encontrado`);
@@ -239,6 +248,9 @@ export class RoutingService {
       const route = await tx.alternativeRoute.findUnique({ where: { id: routeId } });
       if (!route) throw new NotFoundError(`Ruta ${routeId} no encontrada`);
       if (route.status === 'ACCEPTED') throw new ConflictError('La ruta ya fue aceptada');
+      // Solo a un conductor real y activo: no a un mecánico, a un usuario desactivado ni a un id inventado.
+      const driver = await tx.user.findFirst({ where: { id: driverId, role: 'DRIVER', active: true }, select: { id: true } });
+      if (!driver) throw new InvalidInputError('El usuario indicado no existe, está inactivo o no es conductor');
       const assigned = await tx.alternativeRoute.update({
         where: { id: routeId }, data: { assignedToId: driverId, assignedAt: new Date(), status: 'ASSIGNED' },
       });

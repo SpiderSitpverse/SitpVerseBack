@@ -12,6 +12,8 @@ function fakeDb(opts: { lockEnabled: boolean } = { lockEnabled: true }) {
   const assignments: any[] = [];
   const events: any[] = [];
   const lockOrder: string[] = [];
+  /** Incidentes que "ya no existen" (p. ej. el admin los acaba de eliminar). */
+  const missingIncidents = new Set<string>();
   const queues = new Map<string, Promise<void>>();
   let seq = 0;
   const tick = () => new Promise<void>((resolve) => setImmediate(resolve));
@@ -38,6 +40,11 @@ function fakeDb(opts: { lockEnabled: boolean } = { lockEnabled: true }) {
           await previous;
           releases.push(release);
           return 1;
+        },
+        // `SELECT ... FROM driver_incidents ... FOR SHARE` de `assignTow`: devuelve el incidente (o nada si no existe).
+        $queryRaw: async (_strings: TemplateStringsArray, ...values: unknown[]) => {
+          const id = String(values[0]);
+          return missingIncidents.has(id) ? [] : [{ id, busId: `bus-of-${id}` }];
         },
         driverIncident: {
           findUnique: async ({ where }: any) => ({ id: where.id, busId: `bus-of-${where.id}` }),
@@ -76,7 +83,7 @@ function fakeDb(opts: { lockEnabled: boolean } = { lockEnabled: true }) {
     },
   } as any;
 
-  return { prisma, assignments, events, lockOrder };
+  return { prisma, assignments, events, lockOrder, missingIncidents };
 }
 
 const build = (opts?: { lockEnabled: boolean }) => {
@@ -104,6 +111,17 @@ describe('HU-30 · asignar grúa y cuadrilla', () => {
     expect(row).toMatchObject({ towTruck: 'G-01', crew: 'CUADRILLA NORTE', incidentId: 'inc-1', status: 'ASSIGNED' });
     expect(t.events.map((e) => e.type)).toEqual(['tow.assigned']);
     expect(t.relay.nudge).toHaveBeenCalled();
+  });
+
+  it('si el incidente ya no existe (lo eliminaron) responde 404 y no asigna ni bloquea nada', async () => {
+    const t = build();
+    t.missingIncidents.add('inc-borrado');
+
+    await expect(
+      t.service.assignTow('admin-1', { incidentId: 'inc-borrado', towTruck: 'G-01', crew: 'C-1' }),
+    ).rejects.toBeInstanceOf(NotFoundError);
+    expect(t.assignments).toHaveLength(0);
+    expect(t.lockOrder).toEqual([]);
   });
 
   it('toma el lock de la grúa antes que el de la cuadrilla (orden fijo: evita bloqueos mutuos)', async () => {

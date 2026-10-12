@@ -412,3 +412,59 @@ describe('Estrés y visibilidad por rol', () => {
     expect(await t.listCalls.execute(t.admin)).toHaveLength(2);
   });
 });
+
+describe('"Se quita": una alerta que otro ya tomó desaparece de las listas de los demás', () => {
+  it('apoyo entre conductores: con los cupos llenos la ven solo quien la tomó, el conductor del bus y el admin', async () => {
+    const t = build();
+    const ownBus = (await new FakeBusDirectory(t.repo).findBusOfDriver(t.drivers[0].id))!.id;
+    const incident = await t.reportIncident.execute(t.drivers[0], { busId: ownBus, type: 'ACCIDENTE' });
+    const call = await t.requestSupport.execute(t.admin, incident.id, { slots: 1, rewardPoints: 10 });
+
+    expect(await t.listCalls.execute(t.drivers[2])).toHaveLength(1); // abierta: la ven todos los conductores
+
+    await t.accept.execute(t.drivers[1], call.id); // cupo único → FILLED
+    expect(t.repo.calls.get(call.id)!.status).toBe('FILLED');
+
+    expect(await t.listCalls.execute(t.drivers[2])).toHaveLength(0); // otro conductor: se quitó
+    expect(await t.listCalls.execute(t.drivers[1])).toHaveLength(1); // quien la tomó, la conserva
+    expect(await t.listCalls.execute(t.drivers[0])).toHaveLength(1); // el del bus sabe que le llegó ayuda
+    expect(await t.listCalls.execute(t.admin)).toHaveLength(1); // el admin las ve todas
+  });
+
+  it('con 2 cupos y uno tomado sigue abierta: los demás todavía la ven (aún pueden ayudar)', async () => {
+    const t = build();
+    const call = await openSupportCall(t, 2);
+    await t.accept.execute(t.drivers[1], call.id);
+    expect(await t.listCalls.execute(t.drivers[2])).toHaveLength(1);
+    expect(await t.listCalls.execute(t.drivers[3])).toHaveLength(1);
+  });
+
+  it('si el admin cancela la aceptación (no llegó a tiempo) la alerta vuelve a las listas de los demás', async () => {
+    const t = build();
+    const call = await openSupportCall(t, 1);
+    await t.accept.execute(t.drivers[1], call.id);
+    expect(await t.listCalls.execute(t.drivers[2])).toHaveLength(0);
+
+    await t.cancel.execute(t.admin, call.id, t.repo.claims[0].id);
+    expect(t.repo.calls.get(call.id)!.status).toBe('OPEN');
+    expect(await t.listCalls.execute(t.drivers[2])).toHaveLength(1);
+  });
+
+  it('reparación: el mecánico que la toma la conserva; los otros mecánicos ya no la ven', async () => {
+    const t = build();
+    const { call } = await t.reportFault.execute(t.admin, { busId: t.bus });
+    expect(await t.listCalls.execute(t.mechanics[1])).toHaveLength(1);
+
+    await t.accept.execute(t.mechanics[0], call.id);
+    expect(await t.listCalls.execute(t.mechanics[1])).toHaveLength(0);
+    expect(await t.listCalls.execute(t.mechanics[0])).toHaveLength(1);
+  });
+
+  it('una alerta tomada por otro no revela quién la tomó a conductores ajenos (ni siquiera la ven)', async () => {
+    const t = build();
+    const call = await openSupportCall(t, 1);
+    await t.accept.execute(t.drivers[1], call.id);
+    const views = await t.listCalls.execute(t.drivers[2]);
+    expect(JSON.stringify(views)).not.toContain('Driver 1');
+  });
+});
