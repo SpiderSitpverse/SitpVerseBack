@@ -11,8 +11,8 @@ import { assistanceEvent } from '../assistance-event.factory';
  * El administrador elimina un incidente reportado por error (o que ya no importa).
  *
  * Solo si NADIE lo ha atendido: sus alertas sin aceptaciones se borran con él. Si alguna ya tiene
- * conductores o mecánico asignados, o está terminada (hay trabajo y puntos de por medio), se rechaza con 409:
- * primero se cancelan las aceptaciones.
+ * conductores o mecánico asignados, o está terminada (hay trabajo y puntos de por medio), o hay una grúa en
+ * servicio o una ruta alternativa asignada/aceptada, se rechaza con 409: primero hay que cancelar o terminar eso.
  */
 @Injectable()
 export class DeleteIncidentUseCase {
@@ -30,7 +30,8 @@ export class DeleteIncidentUseCase {
     if (!result.ok) {
       if (result.reason === 'NOT_FOUND') throw new NotFoundError(`Incidente ${incidentId} no encontrado`);
       throw new ConflictError(
-        'Este incidente ya tiene una atención en curso o terminada: cancela las aceptaciones antes de eliminarlo',
+        'Este incidente ya tiene una atención en curso o terminada (alerta aceptada, grúa en servicio o ruta asignada): ' +
+          'cancélala o termínala antes de eliminarlo',
         { reason: result.reason },
       );
     }

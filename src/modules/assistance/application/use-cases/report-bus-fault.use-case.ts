@@ -58,6 +58,7 @@ export class ReportBusFaultUseCase {
       (newCall) => [
         assistanceEvent('call.opened', traceId, { roles: ['MECHANICAL'] }, {
           callId: newCall.id,
+          incidentId: newCall.incidentId ?? null,
           kind: newCall.kind,
           busId: newCall.busId,
           slots: newCall.slots,

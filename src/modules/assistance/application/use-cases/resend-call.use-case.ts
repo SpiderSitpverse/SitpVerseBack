@@ -33,6 +33,7 @@ export class ResendCallUseCase {
     await this.repo.enqueueEvents([
       assistanceEvent('call.opened', traceId, { roles: [ROLE_FOR_KIND[call.kind]] }, {
         callId: call.id,
+        incidentId: call.incidentId ?? null,
         kind: call.kind,
         busId: call.busId,
         slots: call.slots,

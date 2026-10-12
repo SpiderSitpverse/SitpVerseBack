@@ -1,4 +1,17 @@
-import { IsArray, IsEnum, IsInt, IsISO8601, IsOptional, IsString, IsUUID, Min } from 'class-validator';
+import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
+  IsEnum,
+  IsInt,
+  IsISO8601,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+  Min,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateBlockageDto {
@@ -9,13 +22,13 @@ export class CreateBlockageDto {
 
 export class AssignTowDto {
   @IsUUID() incidentId: string;
-  @IsString() towTruck: string;
-  @IsString() crew: string;
+  @IsString() @IsNotEmpty() @MaxLength(60) towTruck: string;
+  @IsString() @IsNotEmpty() @MaxLength(60) crew: string;
 }
 
 export class AssignTowRequestDto {
-  @IsString() towTruck: string;
-  @IsString() crew: string;
+  @IsString() @IsNotEmpty() @MaxLength(60) towTruck: string;
+  @IsString() @IsNotEmpty() @MaxLength(60) crew: string;
 }
 
 export class AttachIncidentEvidenceDto {
@@ -38,8 +51,9 @@ export class ListTowReportsDto {
 }
 
 export class CreateAlternativeRouteDto {
-  @IsString() name: string;
-  @IsArray() geometry: unknown[];
+  @IsString() @IsNotEmpty() @MaxLength(120) name: string;
+  /** Lista de puntos `[latitud, longitud]`. La forma de cada punto la valida `parseRouteGeometry`. */
+  @IsArray() @ArrayMinSize(2) @ArrayMaxSize(2000) geometry: unknown[];
 }
 
 export class AssignAlternativeRouteDto {
