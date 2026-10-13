@@ -102,7 +102,9 @@ async function upload(as, incidentId, { buffer = PNG, type = 'image/png', name =
     ['Aceptar una alerta (cupo)', 'POST', `/assistance/calls/${UUID}/accept`, ['DRIVER', 'MECHANICAL'], {}],
     ['Cancelar aceptación vencida', 'POST', `/assistance/calls/${UUID}/claims/${UUID}/cancel`, ['ADMIN'], {}],
     ['Reenviar alerta', 'POST', `/assistance/calls/${UUID}/resend`, ['ADMIN'], {}],
-    ['Completar servicio', 'POST', `/assistance/calls/${UUID}/complete`, ['ADMIN', 'MECHANICAL'], {}],
+    // El conductor entra al endpoint solo para el "atención recibida" del que reportó el incidente; la política de
+    // la alerta (no el rol) decide: ver help-received.js, donde a otro conductor se le responde 403.
+    ['Completar servicio', 'POST', `/assistance/calls/${UUID}/complete`, ['ADMIN', 'MECHANICAL', 'DRIVER'], {}],
     ['Ver evidencia de un incidente', 'GET', `/assistance/incidents/${UUID}/evidence`, ['ADMIN', 'DRIVER', 'MECHANICAL']],
   ];
   const sample = { ADMIN: ADMINS[2], DRIVER: DRIVERS[4], MECHANICAL: MECHS[3] }; // usuarios distintos de los demás flujos

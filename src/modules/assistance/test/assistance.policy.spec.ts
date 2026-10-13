@@ -69,6 +69,16 @@ describe('Política de asistencia (reglas de dominio puras)', () => {
     expect(() => assertCanComplete(call('DRIVER_SUPPORT'), user('d1', 'DRIVER'), [claim('d1')])).toThrow(ForbiddenError);
   });
 
+  it('atención recibida: el conductor que reportó el incidente cierra la alerta de apoyo; quien ayuda no', () => {
+    const incident = { reportedById: 'rep' } as DriverIncidentModel;
+    const claims = [claim('ayudante')];
+    expect(() => assertCanComplete(call('DRIVER_SUPPORT'), user('rep', 'DRIVER'), claims, incident)).not.toThrow();
+    expect(() => assertCanComplete(call('DRIVER_SUPPORT'), user('ayudante', 'DRIVER'), claims, incident)).toThrow(ForbiddenError);
+    expect(() => assertCanComplete(call('DRIVER_SUPPORT'), user('otro', 'DRIVER'), claims, incident)).toThrow(ForbiddenError);
+    // el reportante no cierra una reparación (eso es del mecánico o del admin)
+    expect(() => assertCanComplete(call('REPAIR'), user('rep', 'DRIVER'), claims, incident)).toThrow(ForbiddenError);
+  });
+
   it('vencida = activa y pasado su plazo; una cancelada nunca está vencida', () => {
     const past = new Date(Date.now() - 1000);
     expect(isOverdue(claim('d', { arriveBy: past }))).toBe(true);

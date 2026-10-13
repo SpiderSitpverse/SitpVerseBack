@@ -9,6 +9,7 @@ import { ConflictError, InvalidInputError, NotFoundError } from '../../../../sha
 import { isUploadedImageUrl } from '../../../../shared/domain/file-storage.port';
 import { AssistanceEventType } from '../../domain/events/assistance-events';
 import { parseRouteGeometry } from '../../domain/route-geometry';
+import { lockIncident, resolveIncidentIfDone } from './incident-resolution';
 import { ACTIVE_TOW_STATUSES, normalizeResourceName } from '../../domain/tow-resources';
 
 @Injectable()
@@ -110,6 +111,10 @@ export class RoutingService {
       const assignment = await tx.towAssignment.findUnique({ where: { id: assignmentId } });
       if (!assignment) throw new NotFoundError(`Asignación ${assignmentId} no encontrada`);
 
+      // Con el incidente bloqueado: este cierre y el de sus alertas se atienden de uno en uno, y el último ve todo
+      // terminado y resuelve el incidente (ver `incident-resolution.ts`).
+      await lockIncident(tx, assignment.incidentId);
+
       // Atómico: si dos peticiones llegan a la vez, solo una cambia el estado (count = 1).
       const { count } = await tx.towAssignment.updateMany({
         where: { id: assignmentId, status: { in: [...ACTIVE_TOW_STATUSES] } },
@@ -125,7 +130,15 @@ export class RoutingService {
         { assignmentId, incidentId: completed.incidentId, busId: completed.busId, towTruck: completed.towTruck, crew: completed.crew },
         { roles: ['ADMIN', 'DRIVER', 'MECHANICAL'] },
       );
-      await enqueueOutbox(tx, [event]);
+      const events = [event];
+      // Si esta grúa era lo último pendiente del incidente (sus alertas ya habían terminado), queda resuelto.
+      const resolved = await resolveIncidentIfDone(tx, completed.incidentId);
+      if (resolved) {
+        events.push(
+          await this.event('incident.resolved', { incidentId: resolved.id, busId: resolved.busId }, { roles: ['ADMIN'] }),
+        );
+      }
+      await enqueueOutbox(tx, events);
       return completed;
     });
     this.relay.nudge();

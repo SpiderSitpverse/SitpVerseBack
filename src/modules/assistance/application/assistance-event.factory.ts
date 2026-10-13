@@ -23,19 +23,25 @@ export function assistanceEvent(
   };
 }
 
-/** Evento "servicio terminado y puntos acreditados": lo emiten completar una alerta y finalizar un informe. */
+/**
+ * Eventos de "servicio terminado y puntos acreditados": los emiten completar una alerta y finalizar un informe.
+ * Si con esa alerta el incidente quedó resuelto, se añade `incident.resolved` (el admin lo quita de su lista y se
+ * descartan los avisos pendientes de ese incidente).
+ */
 export function callCompletedEvents(
   traceId: string,
   call: AssistanceCallModel,
   awardedUserIds: string[],
+  incidentResolved: { id: string; busId: string } | null = null,
 ): AssistanceEvent[] {
-  return [
+  const events = [
     assistanceEvent(
       'call.completed',
       traceId,
       { roles: ['ADMIN'], userIds: awardedUserIds },
       {
         callId: call.id,
+        incidentId: call.incidentId ?? null,
         kind: call.kind,
         busId: call.busId,
         rewardPoints: call.rewardPoints,
@@ -43,4 +49,13 @@ export function callCompletedEvents(
       },
     ),
   ];
+  if (incidentResolved) {
+    events.push(
+      assistanceEvent('incident.resolved', traceId, { roles: ['ADMIN'] }, {
+        incidentId: incidentResolved.id,
+        busId: incidentResolved.busId,
+      }),
+    );
+  }
+  return events;
 }

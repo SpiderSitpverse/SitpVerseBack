@@ -39,15 +39,20 @@ export function assertNotOwnIncident(incident: DriverIncidentModel | null, actor
 
 /**
  * Completar: el ADMIN siempre; en reparaciones también el mecánico que la tomó (aceptación
- * ACTIVA). Con cupos de apoyo solo cierra el ADMIN.
+ * ACTIVA); en alertas de apoyo también el conductor que reportó el incidente ("atención recibida").
+ * Quien ayuda NO cierra su propia ayuda (cobra puntos por ello).
  */
 export function assertCanComplete(
   call: AssistanceCallModel,
   actor: Actor,
   activeClaims: ClaimModel[],
+  incident: DriverIncidentModel | null = null,
 ): void {
   const isClaimer = activeClaims.some((claim) => claim.userId === actor.id);
+  const isReporter =
+    call.kind === 'DRIVER_SUPPORT' && actor.role === 'DRIVER' && incident !== null && incident.reportedById === actor.id;
   const allowed =
+    isReporter ||
     actor.role === 'ADMIN' ||
     (call.kind === 'REPAIR' && actor.role === 'MECHANICAL' && isClaimer);
   if (!allowed) throw new ForbiddenError('No puedes completar esta alerta');

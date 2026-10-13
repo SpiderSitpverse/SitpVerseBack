@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
-import { NotFoundError } from '../../../../shared/domain/errors';
+import { ConflictError, NotFoundError } from '../../../../shared/domain/errors';
 import { AuthenticatedUser } from '../../../identity/public';
 import {
   ASSISTANCE_REPOSITORY,
@@ -38,8 +38,13 @@ export class ReportBusFaultUseCase {
     if (!(await this.buses.exists(data.busId))) {
       throw new NotFoundError(`Bus ${data.busId} no encontrado`);
     }
-    if (data.incidentId && !(await this.repo.findIncident(data.incidentId))) {
-      throw new NotFoundError(`Incidente ${data.incidentId} no encontrado`);
+    if (data.incidentId) {
+      const incident = await this.repo.findIncident(data.incidentId);
+      if (!incident) throw new NotFoundError(`Incidente ${data.incidentId} no encontrado`);
+      // Aviso temprano; la garantía real es el bloqueo del incidente al crear la alerta (ver el repositorio).
+      if (incident.status === 'RESOLVED') {
+        throw new ConflictError('Ese incidente ya está resuelto', { reason: 'INCIDENT_RESOLVED' });
+      }
     }
 
     // Solo la alerta realmente nueva genera evento: los mecánicos no reciben duplicados.

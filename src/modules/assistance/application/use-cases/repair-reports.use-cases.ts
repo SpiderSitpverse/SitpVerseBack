@@ -48,7 +48,8 @@ export class SaveRepairReportUseCase {
       { id: actor.id, name: actor.name },
       report,
       finalize,
-      ({ call: closed, awardedUserIds }) => callCompletedEvents(traceId, closed, awardedUserIds),
+      ({ call: closed, awardedUserIds, incidentResolved }) =>
+        callCompletedEvents(traceId, closed, awardedUserIds, incidentResolved ?? null),
     );
 
     if (!result.ok) {

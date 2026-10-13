@@ -49,14 +49,18 @@ export interface AssistanceRepositoryPort {
   listIncidents(): Promise<DriverIncidentModel[]>;
 
   /**
-   * Elimina un incidente con sus rutas, grúas y evidencias, y las alertas que nadie atendió, en una
-   * transacción. Si alguna alerta ya tiene aceptaciones o está terminada NO se borra nada
-   * (`IN_PROGRESS`): hay trabajo o puntos de por medio. Bloquea las alertas con `FOR UPDATE` para no
-   * competir con un conductor que acepta justo en ese momento.
+   * Elimina un incidente con sus rutas, grúas inactivas y evidencias, y sus alertas, en una transacción.
+   *  - Grúa en servicio: NO se borra nada (`TOW_ACTIVE`), ni siquiera con `force`: hay que terminar el servicio.
+   *  - Alguien atendiendo una alerta (`CLAIMED`) o una ruta asignada/aceptada (`ROUTE_ACTIVE`): NO se borra nada,
+   *    salvo con `force`: entonces se cancelan las aceptaciones (sin puntos) y se borra el desvío.
+   *  - Alertas ya terminadas: se pueden borrar (los puntos pagados no se pierden).
+   * Bloquea las alertas con `FOR UPDATE` para no competir con un conductor que acepta justo en ese momento.
    */
   deleteIncident(
     id: string,
-    eventsOf: EventsOf<{ id: string; busId: string }>,
+    /** `affectedUserIds`: a quién se le cae el trabajo (aceptaciones activas y desvíos asignados). */
+    eventsOf: EventsOf<{ id: string; busId: string; affectedUserIds: string[] }>,
+    options?: { force?: boolean },
   ): Promise<DeleteIncidentResult>;
 
   /**

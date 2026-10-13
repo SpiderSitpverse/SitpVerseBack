@@ -100,15 +100,27 @@ export class InMemoryAssistanceRepository implements AssistanceRepositoryPort {
     return [...this.incidents.values()].map((i) => ({ ...i }));
   }
 
-  async deleteIncident(id: string, eventsOf: EventsOf<{ id: string; busId: string }>): Promise<DeleteIncidentResult> {
+  async deleteIncident(
+    id: string,
+    eventsOf: EventsOf<{ id: string; busId: string; affectedUserIds: string[] }>,
+    options: { force?: boolean } = {},
+  ): Promise<DeleteIncidentResult> {
     await tick();
     const incident = this.incidents.get(id);
     if (!incident) return { ok: false, reason: 'NOT_FOUND' };
     const calls = [...this.calls.values()].filter((c) => c.incidentId === id);
-    if (calls.some((c) => c.claimedCount > 0 || c.status !== 'OPEN')) return { ok: false, reason: 'IN_PROGRESS' };
-    for (const call of calls) this.calls.delete(call.id);
+    const beingAttended = calls.some((c) => c.status !== 'COMPLETED' && c.claimedCount > 0);
+    if (beingAttended && !options.force) return { ok: false, reason: 'CLAIMED' };
+    const ongoing = new Set(calls.filter((c) => c.status !== 'COMPLETED').map((c) => c.id));
+    const affectedUserIds = [
+      ...new Set(this.claims.filter((cl) => ongoing.has(cl.callId) && cl.status === 'ACTIVE').map((cl) => cl.userId)),
+    ];
+    for (const call of calls) {
+      this.calls.delete(call.id);
+      this.claims = this.claims.filter((cl) => cl.callId !== call.id);
+    }
     this.incidents.delete(id);
-    this.publish(eventsOf, { id, busId: incident.busId });
+    this.publish(eventsOf, { id, busId: incident.busId, affectedUserIds });
     return { ok: true, busId: incident.busId, removedCalls: calls.length };
   }
 
@@ -262,7 +274,18 @@ export class InMemoryAssistanceRepository implements AssistanceRepositoryPort {
         this.rewards.push({ userId, callId, points: call.rewardPoints });
       }
     }
-    const done = { call: { ...call }, awardedUserIds };
+    // Con esta terminaron todas las alertas del incidente: queda resuelto (igual que en la base de datos).
+    const incident = call.incidentId ? this.incidents.get(call.incidentId) : undefined;
+    let incidentResolved: { id: string; busId: string } | null = null;
+    if (
+      incident &&
+      incident.status !== 'RESOLVED' &&
+      [...this.calls.values()].filter((c) => c.incidentId === incident.id).every((c) => c.status === 'COMPLETED')
+    ) {
+      incident.status = 'RESOLVED';
+      incidentResolved = { id: incident.id, busId: incident.busId };
+    }
+    const done = { call: { ...call }, awardedUserIds, incidentResolved };
     this.publish(eventsOf, done);
     return done;
   }

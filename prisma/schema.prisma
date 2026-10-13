@@ -98,6 +98,7 @@ model BusPosition {
 enum IncidentReportStatus {
   REPORTED // el conductor avisó a administración
   HELP_REQUESTED // el admin ya lanzó la alerta de apoyo a conductores
+  RESOLVED // todas sus alertas terminaron (p. ej. el conductor confirmó "atención recibida")
 }
 
 enum BlockageStatus {

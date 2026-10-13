@@ -14,6 +14,8 @@ function fakeDb(opts: { lockEnabled: boolean } = { lockEnabled: true }) {
   const lockOrder: string[] = [];
   /** Incidentes que "ya no existen" (p. ej. el admin los acaba de eliminar). */
   const missingIncidents = new Set<string>();
+  /** Incidentes que ya quedaron RESUELTOS (el fin de la última grúa los resuelve). */
+  const resolvedIncidents = new Set<string>();
   const queues = new Map<string, Promise<void>>();
   let seq = 0;
   const tick = () => new Promise<void>((resolve) => setImmediate(resolve));
@@ -47,9 +49,25 @@ function fakeDb(opts: { lockEnabled: boolean } = { lockEnabled: true }) {
           return missingIncidents.has(id) ? [] : [{ id, busId: `bus-of-${id}` }];
         },
         driverIncident: {
-          findUnique: async ({ where }: any) => ({ id: where.id, busId: `bus-of-${where.id}` }),
+          findUnique: async ({ where }: any) => ({
+            id: where.id,
+            busId: `bus-of-${where.id}`,
+            status: resolvedIncidents.has(where.id) ? 'RESOLVED' : 'HELP_REQUESTED',
+          }),
+          updateMany: async ({ where }: any) => {
+            if (resolvedIncidents.has(where.id)) return { count: 0 };
+            resolvedIncidents.add(where.id);
+            return { count: 1 };
+          },
         },
+        assistanceCall: { count: async () => 0 },
         towAssignment: {
+          count: async ({ where }: any) =>
+            assignments.filter(
+              (row) =>
+                row.incidentId === where.incidentId &&
+                (typeof where.status === 'string' ? row.status === where.status : where.status.in.includes(row.status)),
+            ).length,
           findFirst: async ({ where }: any) => {
             await tick();
             return assignments.find((row) => matches(row, where)) ?? null;
@@ -83,7 +101,7 @@ function fakeDb(opts: { lockEnabled: boolean } = { lockEnabled: true }) {
     },
   } as any;
 
-  return { prisma, assignments, events, lockOrder, missingIncidents };
+  return { prisma, assignments, events, lockOrder, missingIncidents, resolvedIncidents };
 }
 
 const build = (opts?: { lockEnabled: boolean }) => {
@@ -236,6 +254,19 @@ describe('HU-30 · asignar grúa y cuadrilla', () => {
 });
 
 describe('HU-30/HU-50 · completar el servicio de grúa', () => {
+  it('si el incidente aún tiene otra grúa en servicio NO se resuelve; al terminar la última sí (una sola vez)', async () => {
+    const t = build();
+    const a = await t.service.assignTow('admin-1', { incidentId: 'inc-9', towTruck: 'G-A', crew: 'C-A' });
+    const b = await t.service.assignTow('admin-1', { incidentId: 'inc-9', towTruck: 'G-B', crew: 'C-B' });
+
+    await t.service.completeTow(a.id);
+    expect(t.resolvedIncidents.has('inc-9')).toBe(false);
+
+    await t.service.completeTow(b.id);
+    expect(t.resolvedIncidents.has('inc-9')).toBe(true);
+    expect(t.events.filter((e) => e.type === 'incident.resolved')).toHaveLength(1);
+  });
+
   it('libera la grúa y la cuadrilla: se pueden asignar de nuevo', async () => {
     const t = build();
     const first = await t.service.assignTow('admin-1', { incidentId: 'inc-1', towTruck: 'G-01', crew: 'C-1' });
@@ -244,7 +275,9 @@ describe('HU-30/HU-50 · completar el servicio de grúa', () => {
 
     expect(done.status).toBe('COMPLETED');
     expect(done.completedAt).toBeInstanceOf(Date);
-    expect(t.events.map((e) => e.type)).toEqual(['tow.assigned', 'tow.completed']);
+    // Era lo único que tenía el incidente: al terminar, el incidente queda resuelto y se avisa.
+    expect(t.events.map((e) => e.type)).toEqual(['tow.assigned', 'tow.completed', 'incident.resolved']);
+    expect(t.resolvedIncidents.has('inc-1')).toBe(true);
 
     const again = await t.service.assignTow('admin-1', { incidentId: 'inc-2', towTruck: 'G-01', crew: 'C-1' });
     expect(again.incidentId).toBe('inc-2');

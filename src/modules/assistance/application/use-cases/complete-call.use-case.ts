@@ -30,12 +30,17 @@ export class CompleteCallUseCase {
     if (activeClaims.length === 0) {
       throw new ConflictError('Nadie tiene una aceptación activa en esta alerta');
     }
-    assertCanComplete(call, actor, activeClaims);
+    const incident = call.incidentId ? await this.repo.findIncident(call.incidentId) : null;
+    assertCanComplete(call, actor, activeClaims, incident);
 
-    const done = await this.repo.complete(callId, ({ call: closed, awardedUserIds }) =>
-      callCompletedEvents(traceId, closed, awardedUserIds),
+    const done = await this.repo.complete(callId, ({ call: closed, awardedUserIds, incidentResolved }) =>
+      callCompletedEvents(traceId, closed, awardedUserIds, incidentResolved ?? null),
     );
-    if (!done) throw new ConflictError('La alerta ya fue completada');
+    if (!done) {
+      // Perdió una carrera: o ya la completó otro (409) o el admin acaba de eliminar el incidente y la alerta ya no existe (404).
+      if (!(await this.repo.findCall(callId))) throw new NotFoundError(`Alerta ${callId} no encontrada`);
+      throw new ConflictError('La alerta ya fue completada');
+    }
 
     return {
       traceId,

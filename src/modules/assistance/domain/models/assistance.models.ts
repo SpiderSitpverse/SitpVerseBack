@@ -2,7 +2,7 @@ import { UserRole } from '../../../../shared/domain/roles';
 
 export type AssistanceKind = 'DRIVER_SUPPORT' | 'REPAIR';
 export type CallStatus = 'OPEN' | 'FILLED' | 'COMPLETED';
-export type IncidentReportStatus = 'REPORTED' | 'HELP_REQUESTED';
+export type IncidentReportStatus = 'REPORTED' | 'HELP_REQUESTED' | 'RESOLVED';
 export type ClaimStatus = 'ACTIVE' | 'CANCELLED';
 
 export interface DriverIncidentModel {
@@ -150,9 +150,12 @@ export type ClaimResult =
   | { ok: true; call: AssistanceCallModel; claim: ClaimModel; filled: boolean }
   | { ok: false; reason: ClaimFailure };
 
+/** CLAIMED = alguien la está atendiendo; TOW_ACTIVE = grúa en servicio; ROUTE_ACTIVE = ruta asignada o aceptada. */
+export type DeleteIncidentFailure = 'NOT_FOUND' | 'CLAIMED' | 'TOW_ACTIVE' | 'ROUTE_ACTIVE';
+
 export type DeleteIncidentResult =
   | { ok: true; busId: string; removedCalls: number }
-  | { ok: false; reason: 'NOT_FOUND' | 'IN_PROGRESS' };
+  | { ok: false; reason: DeleteIncidentFailure };
 
 export type CancelFailure = 'NOT_FOUND' | 'NOT_ACTIVE' | 'COMPLETED';
 
@@ -163,4 +166,6 @@ export type CancelResult =
 export interface CompleteResult {
   call: AssistanceCallModel;
   awardedUserIds: string[];
+  /** Si con esta terminaron todas las alertas de su incidente, queda resuelto: se informa aquí para avisarlo. */
+  incidentResolved?: { id: string; busId: string } | null;
 }

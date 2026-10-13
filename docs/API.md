@@ -147,6 +147,11 @@ conductores necesita → los conductores aceptan; los primeros que aceptan se qu
 | Conductores | Ven las solicitudes abiertas | `GET /assistance/calls?status=OPEN` |
 | Conductores | Aceptan | `POST /assistance/calls/:id/accept` → 201 si tomó cupo · 409 `FULL` si ya se llenó |
 | Admin | Cierra el servicio y paga puntos | `POST /assistance/calls/:id/complete` |
+| Conductor que reportó | **"Atención recibida"**: confirma que la ayuda llegó | `POST /assistance/calls/:id/complete` (el mismo endpoint). Solo el que reportó el incidente y solo si alguien aceptó; quien ayuda no puede cerrar su propia ayuda (403), sin aceptación es 409. Cierra la alerta, paga los puntos y, si era lo último pendiente, el incidente pasa a `status: "RESOLVED"` |
+| Admin | Elimina un incidente | `DELETE /assistance/incidents/:id` → 409 con `reason`: `CLAIMED` (alguien lo atiende), `ROUTE_ACTIVE` (ruta asignada o aceptada) o `TOW_ACTIVE` (grúa en servicio). Con `?force=true` se elimina aunque lo atiendan o tenga ruta (se cancelan las aceptaciones, sin puntos); la grúa en servicio bloquea siempre. Un incidente ya terminado se elimina sin `force` y los puntos pagados no se pierden |
+
+Un incidente `RESOLVED` (todas sus alertas y grúas terminaron) debe **salir de la lista activa del admin**; no admite alertas nuevas (409 `INCIDENT_RESOLVED`).
+`GET /assistance/calls` ya no devuelve a un conductor o mecánico las alertas que otro tomó: solo las abiertas, las suyas y, el conductor, las de su bus.
 
 Cada elemento de `GET /assistance/calls` trae lo que la pantalla pinta: `incident` (`type`, `description`,
 `reportedByName`), `bus` (`plate`, `route`, `locationLabel`, `latitude`, `longitude`), `slots`, `claimedCount`,
@@ -340,8 +345,9 @@ socket.on("assistance:event", (e) => {
 | `call.progress` | ADMIN | Alguien aceptó o canceló (`claimedCount/slots`, quién, su bus, `arriveBy`) |
 | `call.closed` | el rol de la alerta + ADMIN | Se llenaron los cupos: **deshabilitar** la notificación |
 | `claim.cancelled` | ADMIN + el cancelado | El admin canceló una aceptación vencida |
-| `call.completed` | ADMIN + quienes cobran | Servicio cerrado y puntos acreditados |
-| `incident.deleted` | ADMIN, DRIVER, MECHANICAL | `{ incidentId, busId }`. El admin eliminó un incidente: refrescar las listas |
+| `call.completed` | ADMIN + quienes cobran | `{ callId, incidentId, rewardPoints, awardedUserIds }`. Servicio cerrado y puntos acreditados: avisar a quien cobra |
+| `incident.deleted` | ADMIN, DRIVER, MECHANICAL | `{ incidentId, busId, affectedUserIds }`. El admin eliminó un incidente: refrescar las listas, quitar los avisos de ese incidente y **avisar a quien esté en `affectedUserIds`** (su aceptación o su desvío se canceló) |
+| `incident.resolved` | ADMIN | `{ incidentId, busId }`. Terminó todo lo pendiente del incidente (una sola vez): sale de la lista activa |
 | `blockage.reported` | ADMIN | `{ incidentId, busId }`. Un conductor reportó un bloqueo |
 | `blockage.alerted` | DRIVER | `{ incidentId, busId, type, description }`. El admin avisó del bloqueo a la flota: **mostrar la alerta** (HU-16, HU-44) |
 | `incident.evidence.attached` | ADMIN, DRIVER, MECHANICAL | `{ incidentId, evidenceId, busId, url }`. Se adjuntó una foto al incidente |

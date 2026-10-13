@@ -2,7 +2,8 @@ import { AudienceEvent } from '../../../../shared/contracts/realtime.contract';
 
 export type AssistanceEventType =
   | 'incident.reported' // conductor → administración
-  | 'incident.deleted' // el admin eliminó un incidente (y sus alertas sin atender): refrescar listas
+  | 'incident.deleted' // el admin eliminó un incidente: refrescar listas (y avisar a quienes lo atendían)
+  | 'incident.resolved' // terminaron todas las alertas del incidente: sale de las listas activas del admin
   | 'call.opened' // alerta nueva (o reenviada) para conductores o mecánicos
   | 'call.progress' // cambió el número de aceptaciones (para administración)
   | 'call.closed' // cupos completos: se deshabilita la notificación

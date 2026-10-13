@@ -205,11 +205,15 @@ export class AssistanceController {
     return this.listIncidents.execute();
   }
 
-  /** El admin elimina un incidente que nadie atendió (409 si ya tiene aceptaciones o está terminado). */
+  /**
+   * El admin elimina un incidente. 409 con `reason` si alguien lo atiende (`CLAIMED`), si hay una grúa en servicio
+   * (`TOW_ACTIVE`) o una ruta asignada (`ROUTE_ACTIVE`). Con `?force=true` se elimina aunque lo atiendan o tenga una
+   * ruta asignada (se cancelan las aceptaciones, sin puntos); la grúa en servicio bloquea siempre.
+   */
   @Delete('incidents/:id')
   @Roles('ADMIN')
-  removeIncident(@Param('id', ParseUUIDPipe) id: string) {
-    return this.deleteIncident.execute(id);
+  removeIncident(@Param('id', ParseUUIDPipe) id: string, @Query('force') force?: string) {
+    return this.deleteIncident.execute(id, { force: force === 'true' });
   }
 
   /** Uso 1 · paso 2: el admin lanza la alerta a conductores (N cupos + recompensa). */
@@ -262,9 +266,12 @@ export class AssistanceController {
     return this.resendCall.execute(id);
   }
 
-  /** Cierra el servicio y acredita los puntos. */
+  /**
+   * Cierra el servicio y acredita los puntos. Lo puede hacer el admin, el mecánico que tomó la reparación y, en una
+   * alerta de apoyo, el conductor que reportó el incidente ("atención recibida"); la política decide cada caso.
+   */
   @Post('calls/:id/complete')
-  @Roles('ADMIN', 'MECHANICAL')
+  @Roles('ADMIN', 'MECHANICAL', 'DRIVER')
   complete(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.completeCall.execute(user, id);
   }

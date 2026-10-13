@@ -1,7 +1,8 @@
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
-import { ConflictError, NotFoundError } from '../../../shared/domain/errors';
+import { ConflictError, ForbiddenError, NotFoundError } from '../../../shared/domain/errors';
+import { CompleteCallUseCase } from '../application/use-cases/complete-call.use-case';
 import { InMemoryLock } from '../../../shared/testing/in-memory-lock';
 import { AcceptCallUseCase } from '../application/use-cases/accept-call.use-case';
 import { DeleteIncidentUseCase } from '../application/use-cases/delete-incident.use-case';
@@ -27,6 +28,7 @@ function build() {
     repo, admin, reporter, helper, mechanic, bus,
     report: new ReportDriverIncidentUseCase(repo, buses),
     fault: new ReportBusFaultUseCase(repo, buses, cfg),
+    complete: new CompleteCallUseCase(repo),
     support: new RequestDriverSupportUseCase(repo),
     accept: new AcceptCallUseCase(repo, buses, new InMemoryLock(), cfg),
     remove: new DeleteIncidentUseCase(repo),
@@ -75,6 +77,102 @@ describe('El admin elimina un incidente', () => {
 
   it('un incidente que no existe → 404', async () => {
     await expect(build().remove.execute(randomUUID())).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  describe('atención recibida: el conductor que reportó cierra la alerta', () => {
+    async function helped() {
+      const t = build();
+      const incident = await t.report.execute(t.reporter, { busId: t.bus, type: 'ACCIDENTE' });
+      const call = await t.support.execute(t.admin, incident.id, { slots: 1, rewardPoints: 30 });
+      await t.accept.execute(t.helper, call.id);
+      return { t, incident, call };
+    }
+
+    it('al confirmar: se paga a quien ayudó, la alerta se cierra y el incidente queda RESUELTO', async () => {
+      const { t, incident, call } = await helped();
+      await t.complete.execute(t.reporter, call.id);
+
+      expect(t.repo.calls.get(call.id)!.status).toBe('COMPLETED');
+      expect(t.repo.rewards).toEqual([{ userId: t.helper.id, callId: call.id, points: 30 }]);
+      expect((await t.repo.findIncident(incident.id))!.status).toBe('RESOLVED');
+    });
+
+    it('al resolverse se emite incident.resolved (una sola vez) para que el admin lo quite de su lista al instante', async () => {
+      const { t, incident, call } = await helped();
+      await t.complete.execute(t.reporter, call.id);
+
+      const events = t.repo.ofType('incident.resolved');
+      expect(events).toHaveLength(1);
+      expect(events[0].audience.roles).toEqual(['ADMIN']);
+      expect(events[0].payload).toMatchObject({ incidentId: incident.id });
+    });
+
+    it('en un incidente ya resuelto no se puede abrir una solicitud de reparación nueva (409)', async () => {
+      const { t, incident, call } = await helped();
+      await t.complete.execute(t.reporter, call.id);
+
+      await expect(t.fault.execute(t.admin, { busId: t.bus, incidentId: incident.id })).rejects.toMatchObject({
+        details: { reason: 'INCIDENT_RESOLVED' },
+      });
+    });
+
+    it('antes de que alguien acepte no hay nada que confirmar (409)', async () => {
+      const t = build();
+      const incident = await t.report.execute(t.reporter, { busId: t.bus, type: 'ACCIDENTE' });
+      const call = await t.support.execute(t.admin, incident.id, { slots: 1, rewardPoints: 30 });
+      await expect(t.complete.execute(t.reporter, call.id)).rejects.toBeInstanceOf(ConflictError);
+    });
+
+    it('quien ayuda no puede cerrar su propia ayuda (403) y un segundo "recibida" no paga dos veces (409)', async () => {
+      const { t, call } = await helped();
+      await expect(t.complete.execute(t.helper, call.id)).rejects.toBeInstanceOf(ForbiddenError);
+      await t.complete.execute(t.reporter, call.id);
+      await expect(t.complete.execute(t.reporter, call.id)).rejects.toBeInstanceOf(ConflictError);
+      expect(t.repo.rewards).toHaveLength(1);
+    });
+
+    it('si el incidente tiene otra alerta abierta NO queda resuelto todavía', async () => {
+      const { t, incident, call } = await helped();
+      await t.fault.execute(t.admin, { busId: t.bus, incidentId: incident.id });
+      await t.complete.execute(t.reporter, call.id);
+      expect((await t.repo.findIncident(incident.id))!.status).not.toBe('RESOLVED');
+    });
+
+    it('un incidente ya terminado se puede eliminar (los puntos pagados no se pierden)', async () => {
+      const { t, incident, call } = await helped();
+      await t.complete.execute(t.reporter, call.id);
+
+      await expect(t.remove.execute(incident.id)).resolves.toMatchObject({ deleted: true });
+      expect(t.repo.rewards).toHaveLength(1);
+    });
+  });
+
+  describe('eliminar con alguien atendiendo', () => {
+    it('sin force → 409 CLAIMED (y no se toca nada)', async () => {
+      const t = build();
+      const incident = await t.report.execute(t.reporter, { busId: t.bus, type: 'ACCIDENTE' });
+      const call = await t.support.execute(t.admin, incident.id, { slots: 2, rewardPoints: 10 });
+      await t.accept.execute(t.helper, call.id);
+
+      await expect(t.remove.execute(incident.id)).rejects.toMatchObject({ details: { reason: 'CLAIMED' } });
+      expect(await t.repo.findIncident(incident.id)).not.toBeNull();
+    });
+
+    it('con force → se elimina, se cancelan las aceptaciones y nadie cobra puntos', async () => {
+      const t = build();
+      const incident = await t.report.execute(t.reporter, { busId: t.bus, type: 'ACCIDENTE' });
+      const call = await t.support.execute(t.admin, incident.id, { slots: 2, rewardPoints: 10 });
+      await t.accept.execute(t.helper, call.id);
+
+      await expect(t.remove.execute(incident.id, { force: true })).resolves.toMatchObject({ deleted: true, removedCalls: 1 });
+      expect(t.repo.calls.size).toBe(0);
+      expect(t.repo.claims).toHaveLength(0);
+      expect(t.repo.rewards).toHaveLength(0);
+
+      // A quien ayudaba se le avisa por tiempo real que su aceptación se canceló.
+      const [deleted] = t.repo.ofType('incident.deleted');
+      expect(deleted.payload).toMatchObject({ incidentId: incident.id, affectedUserIds: [t.helper.id] });
+    });
   });
 
   describe('solicitud de reparación enviada al mecánico desde el incidente', () => {

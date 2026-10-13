@@ -4,6 +4,8 @@ import { REDIS_STREAMS } from '../../../../shared/contracts/realtime.contract';
 import { OutboxMessage, enqueueOutbox } from '../../../../shared/infrastructure/outbox/outbox.writer';
 import { OutboxRelay } from '../../../../shared/infrastructure/outbox/outbox.relay';
 import { PrismaService } from '../../../../shared/infrastructure/prisma.service';
+import { ConflictError, NotFoundError } from '../../../../shared/domain/errors';
+import { lockIncident, resolveIncidentIfDone } from './incident-resolution';
 import { AssistanceEvent, EventsOf } from '../../domain/events/assistance-events';
 import {
   AssistanceRepositoryPort,
@@ -21,6 +23,7 @@ import {
   ClaimResult,
   ClaimWithUser,
   CompleteResult,
+  DeleteIncidentFailure,
   DeleteIncidentResult,
   IncidentInfo,
   RepairExpense,
@@ -86,7 +89,8 @@ export class PrismaAssistanceRepository implements AssistanceRepositoryPort {
 
   async deleteIncident(
     id: string,
-    eventsOf: EventsOf<{ id: string; busId: string }>,
+    eventsOf: EventsOf<{ id: string; busId: string; affectedUserIds: string[] }>,
+    options: { force?: boolean } = {},
   ): Promise<DeleteIncidentResult> {
     try {
       const result = await this.prisma.$transaction(async (tx) => {
@@ -103,29 +107,50 @@ export class PrismaAssistanceRepository implements AssistanceRepositoryPort {
           tx.towAssignment.count({ where: { incidentId: id, status: { in: ['ASSIGNED', 'IN_PROGRESS'] } } }),
           tx.alternativeRoute.count({ where: { incidentId: id, status: { in: ['ASSIGNED', 'ACCEPTED'] } } }),
         ]);
-        if (activeTows > 0 || liveRoutes > 0) throw new Abort<'IN_PROGRESS'>('IN_PROGRESS');
+        // La grúa en servicio bloquea SIEMPRE: hay que terminar el servicio para liberarla. Una ruta alternativa
+        // asignada o aceptada solo es un trazado dibujado: con `force` se borra y el conductor pierde ese desvío
+        // (si no, una ruta aceptada impediría eliminar el incidente para siempre).
+        if (activeTows > 0) throw new Abort<'TOW_ACTIVE'>('TOW_ACTIVE');
+        if (liveRoutes > 0 && !options.force) throw new Abort<'ROUTE_ACTIVE'>('ROUTE_ACTIVE');
 
         // Bloquea las alertas del incidente: un conductor que acepte ahora espera y, al desbloquearse,
         // su UPDATE ya no encuentra la fila (no queda ninguna aceptación huérfana).
         const locked = await tx.$queryRaw<{ id: string; status: string; claimedCount: number }[]>`
           SELECT "id", "status", "claimedCount" FROM "assistance_calls"
            WHERE "incidentId" = ${id} FOR UPDATE`;
-        if (locked.some((c) => c.claimedCount > 0 || c.status !== 'OPEN')) {
-          throw new Abort<'IN_PROGRESS'>('IN_PROGRESS');
-        }
+        // Con alguien atendiendo (aceptación activa y sin terminar) solo se borra a propósito (`force`): sus
+        // aceptaciones se cancelan y NO cobran puntos. Las alertas ya terminadas se pueden borrar: los puntos
+        // ya pagados viven en su propio libro y no se pierden.
+        const beingAttended = locked.some((c) => c.status !== 'COMPLETED' && c.claimedCount > 0);
+        if (beingAttended && !options.force) throw new Abort<'CLAIMED'>('CLAIMED');
 
-        // `incidentId` de la alerta no tiene clave foránea: se borran aparte (sin aceptaciones que arrastrar).
+        // A quién se le cae el trabajo (aceptaciones activas y desvíos asignados): el evento se lo avisa a cada uno.
+        const [claimers, detourDrivers] = await Promise.all([
+          tx.assistanceClaim.findMany({
+            where: { status: 'ACTIVE', callId: { in: locked.filter((c) => c.status !== 'COMPLETED').map((c) => c.id) } },
+            select: { userId: true },
+          }),
+          tx.alternativeRoute.findMany({
+            where: { incidentId: id, status: { in: ['ASSIGNED', 'ACCEPTED'] }, assignedToId: { not: null } },
+            select: { assignedToId: true },
+          }),
+        ]);
+        const affectedUserIds = [
+          ...new Set([...claimers.map((c) => c.userId), ...detourDrivers.map((r) => r.assignedToId as string)]),
+        ];
+
+        // `incidentId` de la alerta no tiene clave foránea: se borran aparte (sus aceptaciones caen con ellas).
         await tx.assistanceCall.deleteMany({ where: { incidentId: id } });
         await tx.driverIncident.delete({ where: { id } });
 
         const ok = { ok: true as const, busId: incident.busId, removedCalls: locked.length };
-        await enqueueOutbox(tx, eventsOf({ id, busId: incident.busId }).map(toMessage));
+        await enqueueOutbox(tx, eventsOf({ id, busId: incident.busId, affectedUserIds }).map(toMessage));
         return ok;
       });
       this.relay.nudge();
       return result;
     } catch (e) {
-      if (e instanceof Abort) return { ok: false, reason: e.reason as 'NOT_FOUND' | 'IN_PROGRESS' };
+      if (e instanceof Abort) return { ok: false, reason: e.reason as DeleteIncidentFailure };
       throw e;
     }
   }
@@ -159,6 +184,17 @@ export class PrismaAssistanceRepository implements AssistanceRepositoryPort {
   async createCall(data: NewCall, eventsOf: EventsOf<AssistanceCallModel>) {
     try {
       const call = await this.prisma.$transaction(async (tx) => {
+        // Una alerta ligada a un incidente se crea con ese incidente bloqueado: se atiende en orden con quien lo
+        // está resolviendo o eliminando, y no puede nacer una alerta abierta dentro de un incidente ya RESUELTO
+        // (quedaría invisible para el admin).
+        if (data.incidentId) {
+          const rows = await tx.$queryRaw<{ status: string }[]>`
+            SELECT "status" FROM "driver_incidents" WHERE "id" = ${data.incidentId} FOR UPDATE`;
+          if (rows.length === 0) throw new NotFoundError(`Incidente ${data.incidentId} no encontrado`);
+          if (rows[0].status === 'RESOLVED') {
+            throw new ConflictError('Ese incidente ya está resuelto', { reason: 'INCIDENT_RESOLVED' });
+          }
+        }
         const created = await tx.assistanceCall.create({ data });
         await enqueueOutbox(tx, eventsOf(created).map(toMessage));
         return created;
@@ -321,6 +357,11 @@ export class PrismaAssistanceRepository implements AssistanceRepositoryPort {
     callId: string,
     eventsOf: EventsOf<CompleteResult>,
   ): Promise<CompleteResult | null> {
+    // Se bloquea primero el incidente de la alerta (si tiene): así dos cierres simultáneos del mismo incidente se
+    // atienden de uno en uno y el último sí lo ve terminado y lo resuelve (ver `incident-resolution.ts`).
+    const owner = await tx.assistanceCall.findUnique({ where: { id: callId }, select: { incidentId: true } });
+    if (owner?.incidentId) await lockIncident(tx, owner.incidentId);
+
     const cas = await tx.assistanceCall.updateMany({
       where: { id: callId, status: { in: ['OPEN', 'FILLED'] } },
       data: { status: 'COMPLETED', completedAt: new Date() },
@@ -337,7 +378,11 @@ export class PrismaAssistanceRepository implements AssistanceRepositoryPort {
       skipDuplicates: true,
     });
 
-    const done = { call, awardedUserIds };
+    // Si con esta terminaron TODAS las alertas del incidente (y no hay grúa en servicio), el incidente queda
+    // RESUELTO: sale de las listas activas del admin y se avisa por el evento `incident.resolved`.
+    const incidentResolved = call.incidentId ? await resolveIncidentIfDone(tx, call.incidentId) : null;
+
+    const done = { call, awardedUserIds, incidentResolved };
     await enqueueOutbox(tx, eventsOf(done).map(toMessage));
     return done;
   }
