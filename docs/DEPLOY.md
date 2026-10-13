@@ -108,6 +108,7 @@ az webapp config appsettings set --name <n>-api --resource-group <n>-rg --settin
 | `SCM_DO_BUILD_DURING_DEPLOYMENT=false` | El código llega **ya compilado** desde GitHub Actions. |
 | `JWT_SECRET` | Firma los tokens. Si se pierde o cambia, todas las sesiones se cierran. |
 | `CORS_ORIGIN` | La URL exacta del front (con `https://`); varias, separadas por coma. |
+| `FLEET_FEED_MODE=external` | Apaga el feed simulado de posiciones (ya es el valor por defecto). Con `simulated` el servidor mueve cada bus en servicio ±110 m cada 3 s y **se pisa con el GPS del conductor**: el bus "camina" estando quieto. |
 
 `PORT` no hace falta: App Service lo define y la app ya lo lee. Tampoco `UPLOADS_DIR`: en Azure las fotos van
 automáticamente a `/home/uploads`, el único disco que **persiste** entre reinicios (si la cambias a otro lugar, el

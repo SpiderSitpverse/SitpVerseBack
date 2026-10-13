@@ -24,7 +24,11 @@ const JITTER_DEGREES = 0.002;
  *   2. se pone `FLEET_FEED_MODE=external` para apagar este simulador;
  *   3. dominio, casos de uso, Redis y WebSocket no cambian.
  *
- * Modos (`FLEET_FEED_MODE`): `simulated` (por defecto) | `external` (simulador apagado).
+ * Modos (`FLEET_FEED_MODE`): `external` (por defecto: simulador apagado, las posiciones las manda el GPS del conductor
+ * o la API real) | `simulated` (solo para demos sin dispositivos).
+ *
+ * OJO: encendido, el simulador mueve CADA bus en servicio ±110 m cada 3 s, también el que ya recibe la ubicación real
+ * de su conductor: ambos se pisan y el bus "camina" estando quieto. Por eso NO es el valor por defecto.
  */
 @Injectable()
 export class SimulatedFleetFeed implements OnModuleInit, OnModuleDestroy {
@@ -38,7 +42,7 @@ export class SimulatedFleetFeed implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit() {
-    const mode = this.config.get<string>('FLEET_FEED_MODE', 'simulated');
+    const mode = this.config.get<string>('FLEET_FEED_MODE', 'external');
     if (mode !== 'simulated') {
       this.logger.log(`Feed simulado apagado (FLEET_FEED_MODE=${mode})`);
       return;

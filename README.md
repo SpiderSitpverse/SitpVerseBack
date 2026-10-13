@@ -3,8 +3,9 @@
 Backend de **SitpVerse**: gestión operativa de flota TransMilenio con seguimiento en tiempo real y
 asignación concurrente de ayuda (apoyo de conductores y reparación de buses).
 
-> La API real de TransMilenio aún no está conectada. Buses y usuarios se siembran y las posiciones las
-> genera un feed simulado. Todo está aislado para reemplazarlo sin tocar la lógica de negocio.
+> La API real de TransMilenio aún no está conectada. Buses y usuarios se siembran y la posición la comparte el
+> GPS del conductor (hay un feed simulado, apagado por defecto, `FLEET_FEED_MODE=simulated`, solo para demos sin
+> dispositivos). Todo está aislado para reemplazarlo sin tocar la lógica de negocio.
 
 ---
 
