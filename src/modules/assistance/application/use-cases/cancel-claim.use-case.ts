@@ -12,6 +12,7 @@ import {
 } from '../../domain/ports/assistance-repository.port';
 import { CANCEL_FAILURE_MESSAGE } from '../../domain/assistance.policy';
 import { assistanceEvent } from '../assistance-event.factory';
+import { currentTraceIdOrNew } from '../../../../shared/telemetry-context';
 import { callLockKey } from './accept-call.use-case';
 
 /**
@@ -32,7 +33,7 @@ export class CancelClaimUseCase {
     actor: AuthenticatedUser,
     callId: string,
     claimId: string,
-    traceId = randomUUID(),
+    traceId = currentTraceIdOrNew(),
   ) {
     if (!(await this.repo.findCall(callId))) {
       throw new NotFoundError(`Alerta ${callId} no encontrada`);

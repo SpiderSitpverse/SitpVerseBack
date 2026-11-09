@@ -8,6 +8,7 @@ import {
 } from '../../domain/ports/assistance-repository.port';
 import { assertCanComplete } from '../../domain/assistance.policy';
 import { assistanceEvent } from '../assistance-event.factory';
+import { currentTraceIdOrNew } from '../../../../shared/telemetry-context';
 
 /**
  * Cierra el servicio y acredita los puntos (recompensa de apoyo / bono por bus reparado).
@@ -22,7 +23,7 @@ export class CompleteCallUseCase {
     @Inject(ASSISTANCE_REPOSITORY) private readonly repo: AssistanceRepositoryPort,
   ) {}
 
-  async execute(actor: AuthenticatedUser, callId: string, traceId = randomUUID()) {
+  async execute(actor: AuthenticatedUser, callId: string, traceId = currentTraceIdOrNew()) {
     const call = await this.repo.findCall(callId);
     if (!call) throw new NotFoundError(`Alerta ${callId} no encontrada`);
 

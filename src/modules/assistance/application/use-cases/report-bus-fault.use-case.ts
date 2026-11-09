@@ -9,6 +9,7 @@ import {
 } from '../../domain/ports/assistance-repository.port';
 import { BUS_DIRECTORY, BusDirectoryPort } from '../../domain/ports/bus-directory.port';
 import { assistanceEvent } from '../assistance-event.factory';
+import { currentTraceIdOrNew } from '../../../../shared/telemetry-context';
 
 const DEFAULT_REPAIR_BONUS = 50;
 
@@ -33,7 +34,7 @@ export class ReportBusFaultUseCase {
   async execute(
     actor: AuthenticatedUser,
     data: { busId: string; description?: string; rewardPoints?: number },
-    traceId = randomUUID(),
+    traceId = currentTraceIdOrNew(),
   ) {
     if (!(await this.buses.exists(data.busId))) {
       throw new NotFoundError(`Bus ${data.busId} no encontrado`);

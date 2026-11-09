@@ -4,6 +4,7 @@ import { REDIS_CHANNELS } from '../../shared/contracts/realtime.contract';
 import { REDIS_SUBSCRIBER_CLIENT } from '../../shared/infrastructure/redis.provider';
 import type { BusPositionEvent } from '../../modules/fleet/public';
 import { RealtimeGateway } from '../websocket/realtime.gateway';
+import { MetricsService } from '../../shared/infrastructure/metrics.service';
 
 /**
  * Puente Redis Pub/Sub → WebSocket para eventos EFÍMEROS (posición GPS de los buses).
@@ -22,6 +23,7 @@ export class RedisSubscriberService implements OnModuleInit {
   constructor(
     @Inject(REDIS_SUBSCRIBER_CLIENT) private readonly redis: Redis,
     private readonly gateway: RealtimeGateway,
+    private readonly metrics: MetricsService,
   ) {}
 
   async onModuleInit() {
@@ -29,6 +31,7 @@ export class RedisSubscriberService implements OnModuleInit {
     this.redis.on('message', (channel: string, message: string) => {
       if (channel !== REDIS_CHANNELS.FLEET_POSITIONS) return;
       try {
+        this.metrics.increment('sitpverse_realtime_events_consumed_total', { channel: 'fleet_positions' });
         this.gateway.broadcastPositionUpdate(JSON.parse(message) as BusPositionEvent);
       } catch (err) {
         this.logger.error(`Evento inválido en ${channel}: ${err}`);

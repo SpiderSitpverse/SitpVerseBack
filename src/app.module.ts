@@ -5,6 +5,7 @@ import { FleetModule } from './modules/fleet/public';
 import { IdentityModule } from './modules/identity/public';
 import { RealtimeModule } from './realtime/realtime.module';
 import { SharedModule } from './shared/shared.module';
+import { TelemetryInterceptor } from './shared/infrastructure/telemetry.interceptor';
 
 @Module({
   imports: [
@@ -21,5 +22,6 @@ import { SharedModule } from './shared/shared.module';
     RealtimeModule,
     // Pendientes según el story map: InspectionsModule, ReportingModule
   ],
+  providers: [TelemetryInterceptor],
 })
 export class AppModule {}

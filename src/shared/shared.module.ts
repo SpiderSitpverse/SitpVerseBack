@@ -5,6 +5,9 @@ import { OutboxRelay } from './infrastructure/outbox/outbox.relay';
 import { PrismaService } from './infrastructure/prisma.service';
 import { RedisDistributedLock } from './infrastructure/redis-distributed-lock';
 import { RedisPublisherProvider, RedisRelayProvider } from './infrastructure/redis.provider';
+import { MetricsService } from './infrastructure/metrics.service';
+import { TelemetryService } from './infrastructure/telemetry';
+import { HealthController } from './infrastructure/health.controller';
 
 /**
  * Infraestructura transversal compartida por todos los módulos:
@@ -21,13 +24,18 @@ import { RedisPublisherProvider, RedisRelayProvider } from './infrastructure/red
     { provide: DISTRIBUTED_LOCK, useClass: RedisDistributedLock },
     OutboxRelay,
     OutboxReader,
+    MetricsService,
+    TelemetryService,
   ],
+  controllers: [HealthController],
   exports: [
     PrismaService,
     RedisPublisherProvider,
     DISTRIBUTED_LOCK,
     OutboxRelay,
     OutboxReader,
+    MetricsService,
+    TelemetryService,
   ],
 })
 export class SharedModule {}

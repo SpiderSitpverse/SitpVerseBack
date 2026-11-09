@@ -6,6 +6,7 @@ import {
 } from '../../shared/contracts/realtime.contract';
 import { REDIS_STREAM_CLIENT } from '../../shared/infrastructure/redis.provider';
 import { RealtimeGateway } from '../websocket/realtime.gateway';
+import { MetricsService } from '../../shared/infrastructure/metrics.service';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -29,6 +30,7 @@ export class RedisStreamConsumer implements OnModuleInit, OnModuleDestroy {
   constructor(
     @Inject(REDIS_STREAM_CLIENT) private readonly redis: Redis,
     private readonly gateway: RealtimeGateway,
+    private readonly metrics: MetricsService,
   ) {}
 
   onModuleInit() {
@@ -68,6 +70,7 @@ export class RedisStreamConsumer implements OnModuleInit, OnModuleDestroy {
   private deliver(fields: string[]) {
     try {
       const event = JSON.parse(fields[fields.indexOf('data') + 1]) as AudienceEvent;
+      this.metrics.increment('sitpverse_realtime_events_consumed_total', { channel: 'assistance' });
       this.gateway.broadcastToAudience(event);
     } catch (err) {
       this.logger.error(`Evento inválido en el stream: ${err}`);

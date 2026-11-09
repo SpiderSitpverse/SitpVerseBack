@@ -283,6 +283,38 @@ route.accepted
 incident.evidence.attached
 ```
 
+## Escenarios de calidad 4 y 5
+
+### Observabilidad
+
+La API expone:
+
+```text
+GET /health/live   # proceso activo
+GET /health/ready  # PostgreSQL y Redis disponibles
+GET /metrics       # métricas Prometheus
+```
+
+Cada solicitud acepta `x-trace-id` (o genera uno), lo devuelve en la respuesta y lo
+propaga a los eventos de asistencia y posición. Los logs JSON incluyen `trace_id`,
+duración, ruta, estado y código de error. Las métricas cubren HTTP, WebSocket,
+latencia de entrega realtime, relay/outbox, locks y dependencias.
+
+### Rendimiento, latencia y concurrencia
+
+La concurrencia de alertas usa lock FIFO distribuido más compare-and-set en PostgreSQL.
+Las posiciones usan Pub/Sub por ser eventos efímeros; las alertas usan outbox y Redis
+Streams para entrega durable. Para medir p50/p95 y verificar el umbral configurable:
+
+```bash
+npm run loadtest:quality
+# QUALITY_REQUESTS=100 QUALITY_P95_MS=500 npm run loadtest:quality
+```
+
+El script verifica liveness, readiness, métricas, actualizaciones concurrentes y
+entrega WebSocket. La prueba requiere PostgreSQL, Redis, migraciones, seed y el backend
+activos. Si una dependencia no está disponible, falla explícitamente.
+
 ## Validación local
 
 ```bash
@@ -290,6 +322,7 @@ npm run build
 npm test -- --runInBand
 npx prisma validate
 npx prisma format --check
+npm run loadtest:quality
 ```
 
 Resultado esperado:

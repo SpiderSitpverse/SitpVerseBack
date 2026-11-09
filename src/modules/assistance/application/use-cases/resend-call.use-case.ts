@@ -7,6 +7,7 @@ import {
 } from '../../domain/ports/assistance-repository.port';
 import { ROLE_FOR_KIND } from '../../domain/models/assistance.models';
 import { assistanceEvent } from '../assistance-event.factory';
+import { currentTraceIdOrNew } from '../../../../shared/telemetry-context';
 
 /**
  * El admin reenvía la alerta (tras cancelar una aceptación vencida) a quienes corresponde,
@@ -19,7 +20,7 @@ export class ResendCallUseCase {
     @Inject(ASSISTANCE_REPOSITORY) private readonly repo: AssistanceRepositoryPort,
   ) {}
 
-  async execute(callId: string, traceId = randomUUID()) {
+  async execute(callId: string, traceId = currentTraceIdOrNew()) {
     const call = await this.repo.findCall(callId);
     if (!call) throw new NotFoundError(`Alerta ${callId} no encontrada`);
 

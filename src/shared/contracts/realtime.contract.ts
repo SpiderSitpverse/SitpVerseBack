@@ -39,7 +39,11 @@ export interface RealtimeAudience {
  */
 export interface AudienceEvent {
   eventId: string;
+  type?: string;
   seq?: string;
+  traceId?: string;
+  occurredAt?: string;
+  publishedAt?: string;
   audience: RealtimeAudience;
 }
 

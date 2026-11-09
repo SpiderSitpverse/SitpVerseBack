@@ -8,6 +8,8 @@ export interface BusPositionEvent {
   latitude: number;
   longitude: number;
   updatedAt: string;
+  traceId?: string;
+  occurredAt?: string;
 }
 
 /**
