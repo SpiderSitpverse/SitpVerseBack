@@ -329,7 +329,7 @@ Resultado esperado:
 
 ```text
 Build: PASS
-Tests: 7 suites, 58 tests passed
+Tests: 8 suites, 59 tests passed
 Prisma validate: PASS
 Prisma format: PASS
 ```
