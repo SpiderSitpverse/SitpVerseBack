@@ -90,27 +90,33 @@ Un test (`architecture.spec.ts`) falla si alguien las rompe:
 
 ### Acceso: login, roles y usuarios de demostración
 
-Se inicia sesión con **número de empleado y contraseña** y se recibe un token JWT:
+Se inicia sesión con **Google** (OpenID Connect); SitpVerse no guarda contraseñas. El front pide un nonce, abre el
+inicio de sesión de Google y envía el ID token que recibe:
 
 ```
-POST /auth/login   { "employeeId": "2001", "password": "Sitp2026!" }
-→ { "accessToken": "...", "expiresIn": 28800, "user": { "id", "employeeId", "name", "role" } }
+GET  /auth/nonce                                  → { "nonce": "..." }
+POST /auth/google   { "idToken": "...", "nonce": "..." }
+→ { "accessToken": "...", "expiresIn": 28800, "user": { "id", "employeeId", "name", "role", "email", "photoUrl" } }
 ```
 
-El token viaja en `Authorization: Bearer <token>` (HTTP) y en `auth: { token }` al abrir el WebSocket.
+El backend valida la firma con las llaves públicas de Google, el emisor, la audiencia (el Client ID de SitpVerse), el
+vencimiento, el correo verificado y el nonce. Solo entra quien un administrador prerregistró con su correo (403 con el mismo
+mensaje si no, o si la cuenta está desactivada); el **rol** sale de nuestra base, nunca de Google. Todo ingreso y todo
+rechazo queda en una tabla de auditoría de solo inserción (`GET /audit`, solo ADMIN).
+
+El token de sesión viaja en `Authorization: Bearer <token>` (HTTP) y en `auth: { token }` al abrir el WebSocket.
 `GET /auth/me` devuelve quién eres según el token. Un guard global protege todas las rutas: sin token
-válido responde 401, y una ruta sin rol declarado se rechaza (falla cerrado). Las contraseñas se guardan
-cifradas (bcrypt) y el rol se lee de la base de datos en cada petición.
+válido responde 401, y una ruta sin rol declarado se rechaza (falla cerrado). El rol se lee de la base de datos en cada petición.
 
-| Rol | Usuarios (contraseña `Sitp2026!`) | Puede |
+| Rol | Usuarios | Puede |
 |---|---|---|
 | **ADMIN** | `1001` a `1005` | Ver y operar todos los buses y el mapa en vivo; recibir incidentes; lanzar, cancelar, reenviar y cerrar alertas; rutas alternativas y grúas |
 | **DRIVER** | `2001` a `2005` (cada uno con su bus `TMX-001`…`TMX-005`) | Operar su bus y enviar su ubicación; reportar incidentes y bloqueos; subir fotos; aceptar alertas de apoyo y rutas alternativas |
 | **MECHANICAL** | `3001` a `3005` | Ver buses y el mapa en vivo; subir fotos; aceptar reparaciones y completarlas |
 
 `npm run seed` crea o actualiza estos 15 usuarios y 5 buses **sin borrar nada**; `npm run seed:reset` vacía la
-base de datos y la siembra de nuevo (solo desarrollo). La contraseña sale de `SEED_PASSWORD`: cámbiala si la
-base es visible fuera del equipo. Un conductor solo ve y opera **su** bus.
+base de datos y la siembra de nuevo (solo desarrollo). Los correos del `1001`, `2001` y `3001` salen de
+`SEED_ADMIN_EMAIL`, `SEED_DRIVER_EMAIL` y `SEED_MECHANIC_EMAIL`; los demás quedan con un correo ficticio. Un conductor solo ve y opera **su** bus.
 
 **Fotos:** `POST /files/images` (multipart, campo `photo`, JPEG/PNG/WebP hasta 5 MB) devuelve una URL `/uploads/<id>.<ext>`
 que luego se envía en inspecciones e informes; el archivo se valida por su contenido y se guarda con nombre aleatorio.
