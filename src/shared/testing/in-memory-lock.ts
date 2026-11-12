@@ -38,10 +38,3 @@ export class InMemoryLock implements DistributedLockPort {
     }
   }
 }
-
-/** Sin exclusión mutua: demuestra que la atomicidad de la BD sola ya evita duplicados. */
-export class NoopLock implements DistributedLockPort {
-  async withLock<T>(_key: string, fn: () => Promise<T>): Promise<LockResult<T>> {
-    return { value: await fn(), waitedMs: 0, heldMs: 0 };
-  }
-}

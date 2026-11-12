@@ -24,31 +24,49 @@ VITE_API_URL=http://localhost:3000
 **CORS:** el back acepta los orígenes de `CORS_ORIGIN` (por defecto `http://localhost:5173`, el de Vite).
 Al desplegar, pon ahí la URL del front.
 
-### Iniciar sesión
+### Iniciar sesión (Google · OpenID Connect)
+
+SitpVerse **no guarda contraseñas**: Google confirma quién es la persona y SitpVerse decide qué puede hacer según el
+rol que le asignó un administrador. Flujo:
 
 ```
-POST /auth/login        { "employeeId": "2001", "password": "Sitp2026!" }
-→ 200 { "accessToken": "eyJ…", "expiresIn": 28800, "user": { "id", "employeeId", "name", "role" } }
-→ 401 { "message": "Credenciales inválidas" }       (usuario inexistente o contraseña incorrecta: mismo mensaje)
+1. GET  /auth/nonce                       → 200 { "nonce": "…" }        (un solo uso, vale 5 min)
+2. El front abre el inicio de sesión de Google (scopes openid email profile) poniendo ese nonce.
+3. Google devuelve un ID token (JWT firmado por Google).
+4. POST /auth/google   { "idToken": "eyJ…", "nonce": "…" }
+   → 200 { "accessToken": "eyJ…", "expiresIn": 28800, "user": { "id", "employeeId", "name", "role", "email", "photoUrl" } }
+   → 401 { "message": "Token de Google inválido" }                       (alterado, vencido, de otra app, correo sin verificar, nonce repetido)
+   → 403 { "reason": "PENDING_APPROVAL", "message": "Tu solicitud de acceso está en espera…" }   (no tiene cuenta: queda una solicitud; también si la cuenta está desactivada, con el mismo texto)
+   → 403 { "reason": "ACCESS_REJECTED", "message": "Tu solicitud de acceso fue rechazada…" }
+   → 429 + Retry-After                                                   (más de 10 intentos por minuto desde una IP)
 ```
 
-- `role` es `ADMIN`, `DRIVER` o `MECHANICAL`.
-- El token dura 8 horas (`expiresIn` en segundos). Guárdalo (en `sessionStorage`, como ya haces con la sesión).
+- El backend valida la firma con las llaves públicas de Google, el emisor (`iss`), la audiencia (`aud` = el Client ID de
+  SitpVerse), el vencimiento (`exp`), que el correo esté verificado y que el `nonce` sea uno que él entregó y no se haya usado.
+- En el primer ingreso busca a la persona por el **correo con el que el administrador la prerregistró** y guarda su `sub`
+  de Google; desde entonces la identifica por `sub`. Nombre, apellido y foto se actualizan con los de Google.
+- **Quien no tiene cuenta NO recibe sesión**: queda una *solicitud de acceso* en espera (sin rol) y un administrador la
+  acepta o la rechaza desde "Usuarios". Al aceptarla se crea el usuario con el rol elegido y, en su siguiente intento, entra.
+- `role` es `ADMIN`, `DRIVER` o `MECHANICAL` y **sale de nuestra base**, nunca de Google.
+- **Si un administrador cambia mi rol** (o me desactiva), el back lo aplica en mi SIGUIENTE petición. El front lo refleja en todas
+  las pantallas sin recargar: vuelve a pedir `GET /auth/me` cada 15 s, al volver a la pestaña y tras cualquier 403; si cambió el rol,
+  el menú, las pantallas y las salas del WebSocket pasan al rol nuevo.
+- El token de sesión dura 8 horas (`expiresIn` en segundos). Guárdalo (en `sessionStorage`).
 - Cada petición lleva `Authorization: Bearer <accessToken>`.
 - `GET /auth/me` devuelve el usuario del token (para restaurar la sesión al recargar).
 - **Cualquier `401` ⇒ la sesión terminó** (token vencido o cuenta desactivada): limpia la sesión y vuelve a `/login`.
 - `403` ⇒ el usuario no tiene permiso para esa acción (el back valida el rol aunque el front ya oculte el botón).
 
-### Usuarios de demostración (contraseña `Sitp2026!`)
+### Personal de demostración (se prerregistra con `npm run seed`)
 
-| Rol | Número de empleado | Equivale en el front a |
+| Rol | Número de empleado | Correo con el que entra |
 |---|---|---|
-| ADMIN | `1001` a `1005` | `admin` |
-| DRIVER | `2001` a `2005` (cada uno con su bus `TMX-001`…`TMX-005`) | `conductor`, `conductor2` |
-| MECHANICAL | `3001` a `3005` | `mecanico` |
+| ADMIN | `1001` a `1005` | `1001`: `SEED_ADMIN_EMAIL`; el resto `<empleado>@sitpverse.local` (ficticio) |
+| DRIVER | `2001` a `2005` (cada uno con su bus `TMX-001`…`TMX-005`) | `2001`: `SEED_DRIVER_EMAIL`; el resto ficticio |
+| MECHANICAL | `3001` a `3005` | `3001`: `SEED_MECHANIC_EMAIL`; el resto ficticio |
 
-El campo de login del front (`userId`) pasa a ser el **número de empleado**. El `nombre` que muestra la barra
-superior es `user.name`.
+Los correos ficticios no pueden usarse para entrar: el admin los cambia desde la pantalla "Usuarios" (`PATCH /users/:id`
+con `email`). El nombre que muestra la barra superior es `user.name`.
 
 ### Formato de los errores
 
@@ -59,10 +77,10 @@ superior es `user.name`.
 | Código | Significa |
 |---|---|
 | 400 | Datos inválidos (el `message` dice cuál; los de validación vienen como lista) |
-| 401 | Sin sesión, token vencido o credenciales inválidas |
+| 401 | Sin sesión, token vencido o ID token de Google inválido |
 | 403 | Tu rol no puede hacer esto, o el recurso no es tuyo (p. ej. el bus de otro conductor) |
 | 404 | No existe |
-| 409 | Choca con el estado actual. `reason` dice por qué (`FULL`, `PLATE_TAKEN`, `EMPLOYEE_ID_TAKEN`, `DRIVER_ALREADY_ASSIGNED`, `REPORT_FINALIZED`…) |
+| 409 | Choca con el estado actual. `reason` dice por qué (`FULL`, `PLATE_TAKEN`, `EMPLOYEE_ID_TAKEN`, `EMAIL_TAKEN`, `DRIVER_ALREADY_ASSIGNED`, `REPORT_FINALIZED`…) |
 | 413 | La foto pesa más de 5 MB |
 | 503 | El sistema está saturado: reintentar |
 
@@ -74,27 +92,58 @@ superior es `user.name`.
 
 | Acción | Endpoint |
 |---|---|
-| Iniciar sesión | `POST /auth/login` |
+| Pedir el nonce | `GET /auth/nonce` |
+| Iniciar sesión con Google | `POST /auth/google` |
 | Restaurar sesión | `GET /auth/me` |
-
-### Configuración (`SettingsPage`) — cambiar contraseña
-
-```
-POST /auth/change-password   { "currentPassword": "…", "newPassword": "…" }
-→ 204    · 401 la actual es incorrecta · 400 la nueva es débil (mín. 8 caracteres, con letras y números) · 409 igual a la actual
-```
 
 ### Usuarios (`UsersPage`, solo ADMIN)
 
 | Acción | Endpoint |
 |---|---|
-| Listar personal | `GET /users` → `[{ id, employeeId, name, role, active, createdAt }]` |
-| Crear | `POST /users` `{ employeeId, name, role, password }` → 409 `EMPLOYEE_ID_TAKEN` si ya existe |
-| Editar nombre o rol | `PATCH /users/:id` `{ name?, role? }` |
+| Listar personal | `GET /users` → `[{ id, employeeId, name, role, email, photoUrl, active, createdAt, lastLoginAt }]` |
+| Prerregistrar | `POST /users` `{ employeeId, name, role, email }` (correo de Google de la persona) → 409 `EMPLOYEE_ID_TAKEN` o `EMAIL_TAKEN` |
+| Editar nombre, rol o correo | `PATCH /users/:id` `{ name?, role?, email? }` |
 | Desactivar / reactivar | `PATCH /users/:id` `{ "active": false }` (no borra el historial; la cuenta no puede entrar y su token deja de valer) |
-| Restablecer contraseña | `POST /users/:id/reset-password` `{ newPassword }` → 204 |
 
 Un admin no puede desactivarse ni quitarse el rol a sí mismo, y nunca queda el sistema sin un admin activo (409).
+
+### Solicitudes de acceso (solo ADMIN)
+
+| Acción | Endpoint |
+|---|---|
+| Ver quién espera | `GET /access-requests` → `[{ id, email, name, photoUrl, status, requestedAt, lastAttemptAt }]` (`status`: `PENDING` o `REJECTED`) |
+| Aceptar y dar el rol | `POST /access-requests/:id/approve` `{ role, employeeId?, name? }` → `201` con el usuario creado. Sin `employeeId` se asigna el siguiente libre del rol (1xxx admin, 2xxx conductor, 3xxx mecánico). `404` si otro admin ya la decidió; `409` `EMPLOYEE_ID_TAKEN` / `EMAIL_TAKEN` |
+| Rechazar | `POST /access-requests/:id/reject` → `204` (`400` si ya estaba rechazada) |
+
+Hay como máximo 200 solicitudes abiertas (nadie puede llenar la tabla). Quedan en la auditoría: `access.request`,
+`access.approve` y `access.reject`.
+
+### Auditoría (solo ADMIN, solo lectura)
+
+```
+GET /audit?action=auth.login&outcome=DENIED&actorId=…&resourceType=user&resourceId=…&from=…&to=…&before=…&limit=50
+→ [{ id, at, action, outcome, actorId, actorEmail, actorSub, actorRole, resourceType, resourceId, ip, userAgent, country, traceId, detail }]
+```
+
+Más recientes primero (`limit` ≤ 200; para paginar usa `before` con el `at` del último registro). `outcome` es `SUCCESS`,
+`DENIED` o `FAILURE`. No existe ninguna ruta que modifique o borre registros y la base de datos los rechaza con un trigger.
+Acciones registradas hoy: `auth.login` (exitoso y rechazado, con `detail.reason`), `access.request`, `access.approve`,
+`access.reject`, `user.create`, `user.update`, `user.role_change`.
+
+### Registro de TODAS las peticiones (solo ADMIN, solo lectura)
+
+```
+GET /audit/requests?userId=…&ip=…&country=CO&status=403&path=/fleet&from=…&to=…&before=…&limit=50
+→ [{ id, at, traceId, method, path, status, durationMs, ip, country, userAgent, userId, role }]
+```
+
+Cada petición HTTP (también las rechazadas —401, 403, 429— y las de quien no inició sesión) guarda **hora, IP, país, navegador
+(`userAgent`) y usuario**, más la ruta (sin la query), el código y la duración. Se guarda por lotes cada segundo en `request_log`,
+una tabla de solo inserción (un trigger rechaza UPDATE y DELETE). No se registran `/health` ni las fotos. La IP del cliente se
+toma de `X-Forwarded-For` (Azure) y el país sale de ella (`null` si es privada).
+
+Cada respuesta trae el header `X-Trace-Id`; el mismo `trace_id` sale en el log JSON (`event: http.request`, visible en los logs
+de Azure), en `request_log` y en `audit_log`: con él se rastrea un error hasta su petición.
 
 ### Flota y mapa (`FleetPage`, `TransMilenioMap`, `HomePage`)
 
@@ -398,4 +447,4 @@ conectados por WebSocket ven la posición en el mapa al instante.
 - **Métricas de `ReportsPage`** (ocupación, velocidad media, kilómetros): no existen todavía (Épica 5: KPIs).
   `GET /fleet/summary` y `GET /assistance/summary` cubren los contadores del panel.
 - **Evidencia con marca de agua** (fecha, lugar, responsable) y clasificación de daños con IA: pendientes.
-- **Recuperar contraseña por correo**: no existe; el admin puede restablecerla (`reset-password`).
+- **Recuperar acceso**: la recuperación la hace Google (SitpVerse no guarda contraseñas).

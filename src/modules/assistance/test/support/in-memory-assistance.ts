@@ -49,7 +49,7 @@ export class InMemoryAssistanceRepository implements AssistanceRepositoryPort {
 
   // ── fixtures ──
   addUser(employeeId: string, name: string, role: UserRole): AuthenticatedUser {
-    const user = { id: randomUUID(), employeeId, name, role };
+    const user = { id: randomUUID(), employeeId, name, role, email: `${employeeId}@test.local`, photoUrl: null };
     this.users.set(user.id, user);
     return user;
   }

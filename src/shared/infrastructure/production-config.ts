@@ -17,5 +17,7 @@ export function productionConfigProblems(get: Read): string[] {
   if (!get('REDIS_HOST') || get('REDIS_HOST') === 'localhost') {
     problems.push('REDIS_HOST debe apuntar al Redis de la nube (no a localhost)');
   }
+  if (!get('GOOGLE_CLIENT_ID')) problems.push('GOOGLE_CLIENT_ID es obligatorio (el Client ID de Google OAuth de SitpVerse)');
+  if (get('GOOGLE_JWKS_URI')) problems.push('GOOGLE_JWKS_URI es solo para pruebas: no puede definirse en producción');
   return problems;
 }

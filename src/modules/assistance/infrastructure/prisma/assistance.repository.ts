@@ -272,9 +272,10 @@ export class PrismaAssistanceRepository implements AssistanceRepositoryPort {
              AND "claimedCount" < "slots"`;
         if (updated === 0) {
           const call = await tx.assistanceCall.findUnique({ where: { id: callId } });
-          throw new Abort<ClaimFailure>(
-            !call ? 'NOT_FOUND' : call.status === 'COMPLETED' ? 'CLOSED' : 'FULL',
-          );
+          let reason: ClaimFailure = 'FULL';
+          if (!call) reason = 'NOT_FOUND';
+          else if (call.status === 'COMPLETED') reason = 'CLOSED';
+          throw new Abort<ClaimFailure>(reason);
         }
 
         const call = (await tx.assistanceCall.findUnique({ where: { id: callId } }))!;

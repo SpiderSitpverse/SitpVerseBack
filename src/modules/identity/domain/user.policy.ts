@@ -4,7 +4,6 @@ import { UserView } from './ports/user-admin-repository.port';
 
 /** Reglas de negocio de la administración de usuarios (funciones puras, sin infraestructura). */
 
-export const MIN_PASSWORD_LENGTH = 8;
 const EMPLOYEE_ID = /^[A-Za-z0-9._-]{3,32}$/;
 
 export function assertValidEmployeeId(employeeId: string): void {
@@ -15,14 +14,24 @@ export function assertValidEmployeeId(employeeId: string): void {
   }
 }
 
-export function assertStrongEnoughPassword(password: string): void {
-  if (password.length < MIN_PASSWORD_LENGTH) {
-    throw new InvalidInputError(`La contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres`, {
-      reason: 'WEAK_PASSWORD',
-    });
-  }
-  if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) {
-    throw new InvalidInputError('La contraseña debe combinar letras y números', { reason: 'WEAK_PASSWORD' });
+const MAX_EMAIL_LENGTH = 254;
+
+/** `algo@dominio.tld`: sin espacios, una sola arroba y un punto en el dominio (que no sea ni primero ni último). */
+function looksLikeEmail(email: string): boolean {
+  const at = email.indexOf('@');
+  if (at < 1 || at !== email.lastIndexOf('@') || /\s/.test(email)) return false;
+  const domain = email.slice(at + 1);
+  return domain.length > 2 && domain.includes('.') && !domain.startsWith('.') && !domain.endsWith('.');
+}
+
+export function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+export function assertValidEmail(email: string): void {
+  const value = normalizeEmail(email);
+  if (value.length > MAX_EMAIL_LENGTH || !looksLikeEmail(value)) {
+    throw new InvalidInputError('Escribe un correo válido (el de la cuenta de Google de la persona)');
   }
 }
 

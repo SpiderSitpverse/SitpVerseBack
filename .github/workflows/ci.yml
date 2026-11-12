@@ -1,7 +1,9 @@
 # Integración continua: en cada Pull Request (y push a develop/main) corre las pruebas.
-#  1) "test":        compilación, pruebas unitarias y de arquitectura (rápido, sin infraestructura).
-#  2) "integration": levanta Postgres y Redis, arranca el servidor y corre las pruebas de concurrencia
-#                    REALES (cupos, FIFO, accesos por rol, flujos del front). Un PR que las rompa no debe mezclarse.
+#  1) "test":        compilación, pruebas unitarias y de arquitectura con cobertura (rápido, sin infraestructura).
+#  2) "integration": levanta Postgres y Redis, arranca el servidor (medido con c8) y corre las pruebas REALES de
+#                    concurrencia, seguridad y flujos. Un PR que las rompa no debe mezclarse.
+#  3) "sonar":       une la cobertura de (1) y (2) y la analiza en SonarCloud. Si el Quality Gate falla, el PR no se
+#                    mezcla y nada llega al despliegue en Azure, que solo corre desde main.
 name: CI
 
 on:
@@ -16,15 +18,21 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
-      - run: npx tsc --noEmit -p .
-      - run: npm test
+      - run: npm ci --ignore-scripts
+      - run: npx --no-install prisma generate
+      - run: npx --no-install tsc --noEmit -p .
+      - run: npm test -- --coverage
       - run: npm run build
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: coverage-unit
+          path: coverage/lcov.info
+          retention-days: 7
 
   integration:
     needs: test
@@ -34,7 +42,7 @@ jobs:
         image: postgres:16-alpine
         env:
           POSTGRES_USER: sitpverse
-          POSTGRES_PASSWORD: sitpverse
+          POSTGRES_HOST_AUTH_METHOD: trust # base efímera del runner: sin contraseña que guardar
           POSTGRES_DB: sitpverse
         ports: ['5432:5432']
         options: >-
@@ -45,29 +53,38 @@ jobs:
         options: >-
           --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 10
     env:
-      DATABASE_URL: postgresql://sitpverse:sitpverse@localhost:5432/sitpverse?schema=public
+      DATABASE_URL: postgresql://sitpverse@localhost:5432/sitpverse?schema=public
       REDIS_HOST: localhost
       REDIS_PORT: 6379
       CORS_ORIGIN: http://localhost:5173
       JWT_SECRET: ci-secret-solo-para-pruebas-no-es-de-produccion-0123456789
-      # Todas las pruebas salen de la misma IP y hacen logins fallidos a propósito: se sube el límite por IP
-      # (el de cuenta, que es el que prueba security.js, queda en su valor normal).
-      LOGIN_IP_MAX_FAILURES: 10000
-      LOGIN_ACCOUNT_MAX_FAILURES: 10000
+      # El inicio de sesión con Google se prueba contra un "Google" falso (scripts/load-tests/fake-google.js): sirve las
+      # llaves públicas de prueba y firma ID tokens, incluidos los inválidos. GOOGLE_JWKS_URI solo se acepta fuera de producción.
+      GOOGLE_CLIENT_ID: sitpverse-test.apps.googleusercontent.com
+      GOOGLE_JWKS_URI: http://127.0.0.1:4010/certs
+      STOP_FILE: coverage-integration/stop
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      - run: npm ci --ignore-scripts
+      - run: npx --no-install prisma generate
       - run: npm run build
-      - run: npx prisma migrate deploy
+      - run: npx --no-install prisma migrate deploy
 
+      # El servidor corre bajo c8: así se mide qué código ejercitan estas pruebas reales (controladores, repositorios
+      # Prisma, WebSocket, Redis), que las pruebas unitarias no tocan.
       - name: Arrancar el servidor
         run: |
+          mkdir -p coverage-integration
           npm run seed:reset
-          node dist/main.js > server.log 2>&1 &
+          node scripts/load-tests/fake-google.js > fake-google.log 2>&1 &
+          sleep 2
+          npx --no-install c8 --reporter=lcovonly --report-dir=coverage-integration --temp-directory=coverage-integration/tmp \
+            --exclude-after-remap --include='src/**' --exclude='src/**/test/**' --exclude='src/**/*.spec.ts' \
+            node scripts/load-tests/serve-for-coverage.js > server.log 2>&1 &
           for i in $(seq 40); do
             code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/health || true)
             [ "$code" = "200" ] && break
@@ -84,9 +101,66 @@ jobs:
         run: npm run seed:reset && node scripts/load-tests/access-matrix.js
       - name: Flujos de las pantallas del front
         run: npm run seed:reset && node scripts/load-tests/front-flows.js
-      - name: Seguridad (cabeceras, salud y freno de login)
+      - name: Fotos de buses y borrado de incidentes
+        run: npm run seed:reset && node scripts/load-tests/admin-delete-photo.js
+      - name: Grúas (asignación única)
+        run: npm run seed:reset && node scripts/load-tests/tow-flows.js
+      - name: Atención recibida
+        run: npm run seed:reset && node scripts/load-tests/help-received.js
+      - name: Resolución del incidente bajo concurrencia
+        run: npm run seed:reset && node scripts/load-tests/resolution-concurrency.js
+      - name: Seguridad (Google OIDC, solicitudes de acceso, límite por IP, auditoría inmutable)
         run: node scripts/load-tests/security.js
+
+      # Se apaga el servidor "limpio" (con process.exit) para que V8 escriba la cobertura.
+      - name: Apagar el servidor y guardar la cobertura
+        if: always()
+        run: |
+          touch coverage-integration/stop
+          for i in $(seq 20); do [ -f coverage-integration/lcov.info ] && break; sleep 1; done
+          ls -la coverage-integration
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: coverage-integration
+          path: coverage-integration/lcov.info
+          retention-days: 7
+          if-no-files-found: warn
 
       - name: Log del servidor (si algo falló)
         if: failure()
-        run: tail -n 200 server.log
+        run: |
+          tail -n 200 server.log
+          tail -n 20 fake-google.log
+
+  sonar:
+    needs: [test, integration]
+    runs-on: ubuntu-latest
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0 # SonarCloud necesita el historial completo
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: coverage-unit
+          path: coverage
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: coverage-integration
+          path: coverage-integration
+      - name: Unir la cobertura (unitarias + integración)
+        run: node scripts/merge-coverage.js
+      # Inspección continua (ESC-MANT-01). Necesita el secreto SONAR_TOKEN; sin él (p. ej. PR desde un fork) se omite.
+      - name: SonarCloud
+        if: ${{ env.SONAR_TOKEN != '' }}
+        uses: SonarSource/sonarqube-scan-action@2f77a1ec69fb1d595b06f35ab27e97605bdef703 # v5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      - name: Quality Gate
+        if: ${{ env.SONAR_TOKEN != '' }}
+        uses: SonarSource/sonarqube-quality-gate-action@7a5fffe8e523c40e0c740b6bc2712ab503e52efa # v1
+        timeout-minutes: 5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

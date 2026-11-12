@@ -21,21 +21,101 @@ enum UserRole {
 
 // Usuario mínimo: el login real (JWT) llegará después; hoy se identifica por employeeId.
 model User {
-  id           String   @id @default(uuid())
-  employeeId   String   @unique
-  name         String
-  role         UserRole
-  // Hash bcrypt de la contraseña: NUNCA se guarda ni se devuelve en texto plano.
-  passwordHash String
+  id         String   @id @default(uuid())
+  employeeId String   @unique
+  name       String
+  role       UserRole
+  // La identidad la verifica Google (OpenID Connect); SitpVerse NO guarda contraseñas.
+  // El correo lo registra el administrador al prerregistrar a la persona (siempre en minúsculas).
+  email      String   @unique
+  // `sub` de Google: se guarda en el primer ingreso y desde entonces identifica a la persona aunque cambie de correo.
+  googleSub  String?  @unique
+  firstName  String?
+  lastName   String?
+  photoUrl   String?
   // Una cuenta desactivada no puede iniciar sesión y su token deja de valer, pero se conserva su historial.
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now())
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  lastLoginAt DateTime?
 
   bus     Bus?              @relation("BusDriver")
   claims  AssistanceClaim[]
   rewards RewardEntry[]
 
   @@map("users")
+}
+
+// Quien entra con Google sin tener cuenta deja aquí su solicitud de acceso. No tiene rol ni sesión: un administrador la
+// acepta (se crea el usuario con el rol que elija) o la rechaza desde la pantalla "Usuarios".
+enum AccessRequestStatus {
+  PENDING
+  REJECTED
+}
+
+model AccessRequest {
+  id            String              @id @default(uuid())
+  email         String              @unique
+  googleSub     String              @unique
+  name          String
+  firstName     String?
+  lastName      String?
+  photoUrl      String?
+  status        AccessRequestStatus @default(PENDING)
+  requestedAt   DateTime            @default(now())
+  lastAttemptAt DateTime            @default(now())
+  decidedAt     DateTime?
+  decidedById   String?
+
+  @@index([status, requestedAt])
+  @@map("access_requests")
+}
+
+// Registro de auditoría de SOLO INSERCIÓN (ESC-SEG-03): un trigger de la base rechaza UPDATE y DELETE.
+// Sin claves foráneas a propósito: el registro debe sobrevivir a lo que describe.
+model AuditLog {
+  id           String   @id @default(uuid())
+  at           DateTime @default(now())
+  actorId      String?
+  actorEmail   String?
+  actorSub     String?
+  actorRole    UserRole?
+  action       String
+  resourceType String?
+  resourceId   String?
+  outcome      String // SUCCESS | DENIED | FAILURE
+  ip           String?
+  userAgent    String?
+  country      String?
+  traceId      String?
+  detail       Json?
+
+  @@index([at])
+  @@index([actorId, at])
+  @@index([resourceType, resourceId, at])
+  @@index([action, at])
+  @@map("audit_log")
+}
+
+// Registro de TODAS las peticiones HTTP (ESC-SEG-03): hora, IP, usuario, navegador y país. Solo inserción, como audit_log.
+// Se escribe por lotes (cada segundo) para no sumar una escritura a cada petición de posición.
+model RequestLog {
+  id         BigInt    @id @default(autoincrement())
+  at         DateTime  @default(now())
+  traceId    String
+  method     String
+  path       String
+  status     Int
+  durationMs Int
+  ip         String?
+  country    String?
+  userAgent  String?
+  userId     String?
+  role       UserRole?
+
+  @@index([at])
+  @@index([userId, at])
+  @@index([ip, at])
+  @@map("request_log")
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

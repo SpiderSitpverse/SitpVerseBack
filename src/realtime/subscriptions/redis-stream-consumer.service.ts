@@ -33,7 +33,7 @@ export class RedisStreamConsumer implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit() {
     this.running = true;
-    void this.loop();
+    this.loop().catch((err) => this.logger.error(`El consumidor del stream terminó: ${err}`));
   }
 
   onModuleDestroy() {

@@ -6,8 +6,8 @@ import { AuthenticateTokenUseCase } from '../application/authenticate-token.use-
 import { AuthenticatedUser } from '../domain/models/authenticated-user';
 
 const tokens: Record<string, AuthenticatedUser> = {
-  'token-admin': { id: 'u1', employeeId: '1001', name: 'Admin', role: 'ADMIN' },
-  'token-driver': { id: 'u2', employeeId: '2001', name: 'Driver', role: 'DRIVER' },
+  'token-admin': { id: 'u1', employeeId: '1001', name: 'Admin', role: 'ADMIN', email: 'x@test.local', photoUrl: null },
+  'token-driver': { id: 'u2', employeeId: '2001', name: 'Driver', role: 'DRIVER', email: 'x@test.local', photoUrl: null },
 };
 
 class FakeController {
@@ -68,7 +68,7 @@ describe('AuthGuard global (falla cerrado)', () => {
   it('rol permitido pasa y deja el usuario en la petición', async () => {
     const { ctx, request } = context(controller.both, 'Bearer token-driver');
     await expect(guard.canActivate(ctx)).resolves.toBe(true);
-    expect(request.user).toMatchObject({ role: 'DRIVER' });
+    expect(request.user).toMatchObject({ role: 'DRIVER', email: 'x@test.local', photoUrl: null });
   });
 
   it('acepta "bearer" en minúsculas (los clientes HTTP varían)', async () => {

@@ -57,7 +57,7 @@ export class OutboxRelay implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit() {
     const pollMs = this.config.get<number>('OUTBOX_POLL_MS', 250);
-    this.timer = setInterval(() => void this.drain(), pollMs);
+    this.timer = setInterval(() => this.drainSafely(), pollMs);
   }
 
   onModuleDestroy() {
@@ -66,7 +66,12 @@ export class OutboxRelay implements OnModuleInit, OnModuleDestroy {
 
   /** Despierta al relay ahora mismo (se llama tras confirmar una transacción con eventos). */
   nudge() {
-    setImmediate(() => void this.drain());
+    setImmediate(() => this.drainSafely());
+  }
+
+  /** Lanza un drenaje sin esperar su resultado; un fallo se registra (nunca queda sin atender). */
+  private drainSafely() {
+    this.drain().catch((err) => logEvent('error', 'outbox.drain_failed', { severity: 'ERROR', error: String(err) }));
   }
 
   private async drain() {

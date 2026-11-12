@@ -10,7 +10,7 @@
  */
 const fs = require('fs');
 const path = require('path');
-const { PASSWORD, tokenFor, makeApi, listen } = require('./lib');
+const { loginAs, getNonce, signIdToken, googleLogin, tokenFor, makeApi, listen } = require('./lib');
 
 const BASE = process.argv[2] ?? 'http://localhost:3000';
 const api = makeApi(BASE);
@@ -50,25 +50,16 @@ async function upload(as, incidentId, { buffer = PNG, type = 'image/png', name =
   // ───────────────────────── 1. Login de los 15 usuarios ─────────────────────────
   section('1. Inicio de sesión de los 15 usuarios');
   const everyone = [...ADMINS, ...DRIVERS, ...MECHS];
-  const logins = await Promise.all(
-    everyone.map((id) =>
-      fetch(`${BASE}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ employeeId: id, password: PASSWORD }),
-      }).then(async (r) => ({ id, status: r.status, body: await r.json() })),
-    ),
-  );
-  check('Los 15 usuarios inician sesión con su contraseña (200)', logins.every((l) => l.status === 200), `(${logins.filter((l) => l.status === 200).length}/15)`);
+  const logins = await Promise.all(everyone.map((id) => loginAs(BASE, id).then((r) => ({ id, ...r }))));
+  check('Los 15 usuarios inician sesión con Google (200)', logins.every((l) => l.status === 200), `(${logins.filter((l) => l.status === 200).length}/15)`);
   check('Cada usuario tiene el rol correcto (5 ADMIN, 5 DRIVER, 5 MECHANICAL)',
     logins.every((l) => l.body.user?.role === ROLE_OF(l.id)));
-  check('La respuesta trae accessToken y expiresIn, y NUNCA la contraseña ni su hash',
-    logins.every((l) => l.body.accessToken && l.body.expiresIn > 0 && !JSON.stringify(l.body).match(/passwordHash|\$2[aby]\$/)));
-  const wrong = await fetch(`${BASE}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ employeeId: '1001', password: 'incorrecta' }) });
-  const unknown = await fetch(`${BASE}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ employeeId: '9999', password: 'incorrecta' }) });
-  check('Contraseña incorrecta → 401', wrong.status === 401);
-  check('Usuario inexistente → 401 con el MISMO mensaje (no revela qué números existen)',
-    unknown.status === 401 && (await unknown.json()).message === (await wrong.json()).message);
+  check('La respuesta trae accessToken y expiresIn (8 h), y NUNCA una contraseña ni su hash',
+    logins.every((l) => l.body.accessToken && l.body.expiresIn === 28800 && !JSON.stringify(l.body).match(/password|\$2[aby]\$/i)));
+  const noAccount = await loginAs(BASE, '9999', { email: 'extrano@gmail.com', sub: 'sub-extrano' });
+  const another = await loginAs(BASE, '9998', { email: 'otro-extrano@gmail.com', sub: 'sub-otro-extrano' });
+  check('Una cuenta de Google sin registro NO recibe sesión: 403 PENDING_APPROVAL (queda en espera del admin)',
+    noAccount.status === 403 && noAccount.body.reason === 'PENDING_APPROVAL' && !noAccount.body.accessToken && another.status === 403);
   const me = await api('GET', '/auth/me', '2003');
   check('GET /auth/me devuelve quién soy según el token', me.status === 200 && me.body.employeeId === '2003' && me.body.role === 'DRIVER');
   check('Sin token → 401', (await api('GET', '/fleet/buses')).status === 401);

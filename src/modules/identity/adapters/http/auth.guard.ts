@@ -10,7 +10,14 @@ import { UserRole } from '../../../../shared/domain/roles';
 import { AuthenticateTokenUseCase } from '../../application/authenticate-token.use-case';
 import { PUBLIC_KEY, ROLES_KEY } from './auth.decorators';
 
-const BEARER = /^Bearer\s+(.+)$/i;
+const BEARER_PREFIX = 'bearer ';
+
+/** Token de `Authorization: Bearer <token>` (el esquema no distingue mayúsculas); undefined si no hay. */
+function bearerToken(header: string): string | undefined {
+  const value = header.trim();
+  if (value.slice(0, BEARER_PREFIX.length).toLowerCase() !== BEARER_PREFIX) return undefined;
+  return value.slice(BEARER_PREFIX.length).trim() || undefined;
+}
 
 /**
  * Guard GLOBAL (se registra una vez en IdentityModule vía APP_GUARD): protege TODAS las rutas.
@@ -34,7 +41,7 @@ export class AuthGuard implements CanActivate {
     if (this.reflector.getAllAndOverride<boolean>(PUBLIC_KEY, targets)) return true;
 
     const request = ctx.switchToHttp().getRequest();
-    const token = BEARER.exec(request.headers['authorization'] ?? '')?.[1];
+    const token = bearerToken(request.headers['authorization'] ?? '');
     const user = await this.authenticate.execute(token);
     if (!user) throw new UnauthorizedException('Token ausente, inválido o vencido');
 

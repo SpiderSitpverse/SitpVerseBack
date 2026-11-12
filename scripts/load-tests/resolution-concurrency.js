@@ -12,11 +12,11 @@
  *     `incident.deleted` con su id en `affectedUserIds` cuando el admin elimina el incidente a la fuerza.
  *  5. La grúa que termina DESPUÉS de las alertas también resuelve el incidente (y avisa).
  *
- *   BASE_URL=http://localhost:3300 SEED_PASSWORD=... node scripts/load-tests/resolution-concurrency.js
+ *   node scripts/load-tests/resolution-concurrency.js
  */
 const { makeApi, listen } = require('./lib');
 
-const BASE = process.env.BASE_URL || 'http://localhost:3300';
+const BASE = process.argv[2] ?? process.env.BASE_URL ?? 'http://localhost:3000';
 const ROUNDS = Number(process.env.ROUNDS || 30);
 const api = makeApi(BASE);
 const RUN = Date.now().toString(36).toUpperCase();

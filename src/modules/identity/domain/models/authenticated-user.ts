@@ -6,4 +6,6 @@ export interface AuthenticatedUser {
   employeeId: string;
   name: string;
   role: UserRole;
+  email: string;
+  photoUrl: string | null;
 }
