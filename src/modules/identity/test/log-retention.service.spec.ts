@@ -112,13 +112,19 @@ describe('Retención de los registros de trazabilidad', () => {
 
   it('un fallo al purgar se registra y no tumba la aplicación', async () => {
     jest.useFakeTimers();
+    const logged: string[] = [];
+    const spy = jest.spyOn(Logger.prototype, 'error').mockImplementation((message) => void logged.push(String(message)));
     try {
       const t = build();
-      jest.spyOn(t.service, 'purge').mockRejectedValue(new Error('base caída'));
+      const purge = jest.spyOn(t.service, 'purge').mockRejectedValue(new Error('base caída'));
       t.service.onModuleInit();
       await jest.advanceTimersByTimeAsync(10 * 60 * 1000);
       t.service.onModuleDestroy();
+      expect(purge).toHaveBeenCalledTimes(1); // se intentó y el proceso sigue vivo
+      expect(logged.join('')).toContain('retention.failed');
+      expect(logged.join('')).toContain('base caída');
     } finally {
+      spy.mockRestore();
       jest.useRealTimers();
     }
   });
