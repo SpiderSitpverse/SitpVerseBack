@@ -9,11 +9,11 @@
  *  5. Una grúa en servicio bloquea el borrado aunque se use force.
  *  6. Una ruta alternativa asignada/aceptada pide confirmación, pero con force el incidente se puede eliminar.
  *
- *   BASE_URL=http://localhost:3300 node scripts/load-tests/help-received.js
+ *   node scripts/load-tests/help-received.js
  */
 const { makeApi } = require('./lib');
 
-const BASE = process.env.BASE_URL || 'http://localhost:3300';
+const BASE = process.argv[2] ?? process.env.BASE_URL ?? 'http://localhost:3000';
 const api = makeApi(BASE);
 const RUN = Date.now().toString(36).toUpperCase();
 

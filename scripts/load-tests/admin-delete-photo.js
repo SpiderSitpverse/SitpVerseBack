@@ -6,9 +6,9 @@
  *  3. Carrera: un conductor acepta la alerta justo cuando el admin elimina el incidente. Nunca debe quedar una
  *     aceptación huérfana: o gana el borrado (y el conductor recibe error), o gana la aceptación (y el borrado da 409).
  *
- *   BASE_URL=http://localhost:3300 node scripts/load-tests/admin-delete-photo.js
+ *   node scripts/load-tests/admin-delete-photo.js
  */
-const BASE = process.env.BASE_URL || 'http://localhost:3300';
+const BASE = process.argv[2] ?? process.env.BASE_URL ?? 'http://localhost:3000';
 const { tokenFor } = require('./lib');
 const ROUNDS = Number(process.env.ROUNDS || 25);
 
