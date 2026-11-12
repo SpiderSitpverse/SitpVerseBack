@@ -55,4 +55,7 @@ async function bootstrap() {
   await app.listen(port);
   console.log(`🚌 SitpVerse backend corriendo en http://localhost:${port}`);
 }
-bootstrap();
+bootstrap().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

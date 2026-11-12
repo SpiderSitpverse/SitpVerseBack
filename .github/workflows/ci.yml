@@ -18,16 +18,17 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
-      - run: npx tsc --noEmit -p .
+      - run: npm ci --ignore-scripts
+      - run: npx --no-install prisma generate
+      - run: npx --no-install tsc --noEmit -p .
       - run: npm test -- --coverage
       - run: npm run build
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: coverage-unit
           path: coverage/lcov.info
@@ -41,7 +42,7 @@ jobs:
         image: postgres:16-alpine
         env:
           POSTGRES_USER: sitpverse
-          POSTGRES_PASSWORD: sitpverse
+          POSTGRES_HOST_AUTH_METHOD: trust # base efímera del runner: sin contraseña que guardar
           POSTGRES_DB: sitpverse
         ports: ['5432:5432']
         options: >-
@@ -52,7 +53,7 @@ jobs:
         options: >-
           --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 10
     env:
-      DATABASE_URL: postgresql://sitpverse:sitpverse@localhost:5432/sitpverse?schema=public
+      DATABASE_URL: postgresql://sitpverse@localhost:5432/sitpverse?schema=public
       REDIS_HOST: localhost
       REDIS_PORT: 6379
       CORS_ORIGIN: http://localhost:5173
@@ -63,14 +64,15 @@ jobs:
       GOOGLE_JWKS_URI: http://127.0.0.1:4010/certs
       STOP_FILE: coverage-integration/stop
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      - run: npm ci --ignore-scripts
+      - run: npx --no-install prisma generate
       - run: npm run build
-      - run: npx prisma migrate deploy
+      - run: npx --no-install prisma migrate deploy
 
       # El servidor corre bajo c8: así se mide qué código ejercitan estas pruebas reales (controladores, repositorios
       # Prisma, WebSocket, Redis), que las pruebas unitarias no tocan.
@@ -80,7 +82,7 @@ jobs:
           npm run seed:reset
           node scripts/load-tests/fake-google.js > fake-google.log 2>&1 &
           sleep 2
-          npx c8 --reporter=lcovonly --report-dir=coverage-integration --temp-directory=coverage-integration/tmp \
+          npx --no-install c8 --reporter=lcovonly --report-dir=coverage-integration --temp-directory=coverage-integration/tmp \
             --exclude-after-remap --include='src/**' --exclude='src/**/test/**' --exclude='src/**/*.spec.ts' \
             node scripts/load-tests/serve-for-coverage.js > server.log 2>&1 &
           for i in $(seq 40); do
@@ -117,7 +119,7 @@ jobs:
           touch coverage-integration/stop
           for i in $(seq 20); do [ -f coverage-integration/lcov.info ] && break; sleep 1; done
           ls -la coverage-integration
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: coverage-integration
@@ -137,14 +139,14 @@ jobs:
     env:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0 # SonarCloud necesita el historial completo
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: coverage-unit
           path: coverage
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: coverage-integration
           path: coverage-integration
@@ -153,12 +155,12 @@ jobs:
       # Inspección continua (ESC-MANT-01). Necesita el secreto SONAR_TOKEN; sin él (p. ej. PR desde un fork) se omite.
       - name: SonarCloud
         if: ${{ env.SONAR_TOKEN != '' }}
-        uses: SonarSource/sonarqube-scan-action@v5
+        uses: SonarSource/sonarqube-scan-action@2f77a1ec69fb1d595b06f35ab27e97605bdef703 # v5
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       - name: Quality Gate
         if: ${{ env.SONAR_TOKEN != '' }}
-        uses: SonarSource/sonarqube-quality-gate-action@v1
+        uses: SonarSource/sonarqube-quality-gate-action@7a5fffe8e523c40e0c740b6bc2712ab503e52efa # v1
         timeout-minutes: 5
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
