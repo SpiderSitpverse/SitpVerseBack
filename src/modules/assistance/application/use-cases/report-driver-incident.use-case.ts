@@ -8,6 +8,7 @@ import {
 } from '../../domain/ports/assistance-repository.port';
 import { BUS_DIRECTORY, BusDirectoryPort } from '../../domain/ports/bus-directory.port';
 import { assistanceEvent } from '../assistance-event.factory';
+import { currentTraceIdOrNew } from '../../../../shared/telemetry-context';
 
 /** Uso 1 · paso 1: el conductor reporta un imprevisto y administración recibe la alerta. */
 @Injectable()
@@ -20,7 +21,7 @@ export class ReportDriverIncidentUseCase {
   async execute(
     actor: AuthenticatedUser,
     data: { busId: string; type: string; description?: string },
-    traceId = randomUUID(),
+    traceId = currentTraceIdOrNew(),
   ) {
     if (!(await this.buses.exists(data.busId))) {
       throw new NotFoundError(`Bus ${data.busId} no encontrado`);

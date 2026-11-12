@@ -22,7 +22,8 @@
     "build:seed": "tsc prisma/seed.ts --outDir dist/prisma --module commonjs --target ES2021 --esModuleInterop --skipLibCheck",
     "seed:prod": "node dist/prisma/seed.js",
     "loadtest:security": "node scripts/load-tests/security.js",
-    "fake-google": "node scripts/load-tests/fake-google.js"
+    "fake-google": "node scripts/load-tests/fake-google.js",
+    "loadtest:quality": "node scripts/load-tests/quality.js"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.0",

@@ -8,6 +8,7 @@ import {
   POSITION_PUBLISHER,
   PositionPublisherPort,
 } from '../../domain/ports/position-publisher.port';
+import { currentTraceIdOrNew } from '../../../../shared/telemetry-context';
 
 /**
  * HU-49 (parte 2): Actualizar posición en tiempo real.
@@ -46,6 +47,8 @@ export class UpdateBusPositionUseCase {
       latitude,
       longitude,
       updatedAt: bus.updatedAt.toISOString(),
+      traceId: currentTraceIdOrNew(),
+      occurredAt: new Date().toISOString(),
     });
 
     return bus.toPersistence();

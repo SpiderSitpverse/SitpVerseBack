@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
+import { currentTraceIdOrNew } from '../../../../shared/telemetry-context';
 import { PrismaService } from '../../../../shared/infrastructure/prisma.service';
 import { OutboxRelay } from '../../../../shared/infrastructure/outbox/outbox.relay';
 import { enqueueOutbox } from '../../../../shared/infrastructure/outbox/outbox.writer';
@@ -19,7 +20,7 @@ export class RoutingService {
   private async event(type: AssistanceEventType, payload: Record<string, unknown>, audience: object) {
     const eventId = randomUUID();
     return { eventId, channel: REDIS_STREAMS.ASSISTANCE, payload: {
-      eventId, type, traceId: randomUUID(), occurredAt: new Date().toISOString(), audience, payload,
+      eventId, type, traceId: currentTraceIdOrNew(), occurredAt: new Date().toISOString(), audience, payload,
     }};
   }
 
