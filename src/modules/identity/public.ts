@@ -8,3 +8,6 @@ export { AuthenticateTokenUseCase } from './application/authenticate-token.use-c
 export { FindActiveUserUseCase } from './application/manage-users.use-cases';
 export { CurrentUser, Public, Roles } from './adapters/http/auth.decorators';
 export type { AuthenticatedUser } from './domain/models/authenticated-user';
+export { AUDIT_LOG } from './domain/ports/audit-log.port';
+export { REQUEST_SINK } from '../../shared/domain/request-sink.port';
+export type { AuditEntry, AuditLogPort } from './domain/ports/audit-log.port';

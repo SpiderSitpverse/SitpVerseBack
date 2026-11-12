@@ -35,6 +35,8 @@ async function until(predicate, timeoutMs) {
   const bus = (await api('GET', '/fleet/buses', '1001')).body[0].id;
 
   const { socket, events } = await listen(BASE, '1001');
+  // Iniciar sesión necesita Redis (nonce de un solo uso): los usuarios que se usarán con Redis caído entran ANTES de apagarlo.
+  await api('GET', '/auth/me', '2001');
 
   try {
     console.log('… deteniendo Redis');

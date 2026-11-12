@@ -6,10 +6,10 @@
  *  3. Carrera: un conductor acepta la alerta justo cuando el admin elimina el incidente. Nunca debe quedar una
  *     aceptación huérfana: o gana el borrado (y el conductor recibe error), o gana la aceptación (y el borrado da 409).
  *
- *   BASE_URL=http://localhost:3300 SEED_PASSWORD=... node scripts/load-tests/admin-delete-photo.js
+ *   BASE_URL=http://localhost:3300 node scripts/load-tests/admin-delete-photo.js
  */
 const BASE = process.env.BASE_URL || 'http://localhost:3300';
-const PASSWORD = process.env.SEED_PASSWORD || 'Sitp2026!';
+const { tokenFor } = require('./lib');
 const ROUNDS = Number(process.env.ROUNDS || 25);
 
 let failed = 0;
@@ -28,7 +28,7 @@ async function call(method, path, token, body, headers = {}) {
   try { data = await res.json(); } catch { /* sin cuerpo */ }
   return { status: res.status, data };
 }
-const login = async (employeeId) => (await call('POST', '/auth/login', null, { employeeId, password: PASSWORD })).data.accessToken;
+const login = (employeeId) => tokenFor(BASE, employeeId);
 
 // JPEG mínimo válido por su firma (el back valida el contenido, no el nombre)
 const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01]), Buffer.alloc(64)]);

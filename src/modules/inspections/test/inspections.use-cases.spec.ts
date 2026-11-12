@@ -32,7 +32,7 @@ class InMemoryInspections implements InspectionRepositoryPort {
   }
 }
 
-const user = (id: string, name: string, role: AuthenticatedUser['role']): AuthenticatedUser => ({ id, employeeId: id, name, role });
+const user = (id: string, name: string, role: AuthenticatedUser['role']): AuthenticatedUser => ({ id, employeeId: id, name, role, email: `${id}@test.local`, photoUrl: null });
 
 function build() {
   const buses = new Map<string, string | null>([['bus-1', 'd1'], ['bus-2', 'd2'], ['bus-3', null]]); // bus -> conductor

@@ -7,6 +7,7 @@ const GOOD = {
   CORS_ORIGIN: 'https://sitpverse-front.azurestaticapps.net',
   DATABASE_URL: 'postgresql://u:p@db.postgres.database.azure.com:5432/sitpverse?sslmode=require',
   REDIS_HOST: 'sitpverse.eastus.redis.azure.net',
+  GOOGLE_CLIENT_ID: '1234567890-abc.apps.googleusercontent.com',
 };
 
 describe('Configuración obligatoria en producción', () => {
@@ -26,6 +27,8 @@ describe('Configuración obligatoria en producción', () => {
     ['sin DATABASE_URL', { DATABASE_URL: '' }, /DATABASE_URL/],
     ['con Redis en localhost', { REDIS_HOST: 'localhost' }, /REDIS_HOST/],
     ['sin REDIS_HOST', { REDIS_HOST: '' }, /REDIS_HOST/],
+    ['sin GOOGLE_CLIENT_ID', { GOOGLE_CLIENT_ID: '' }, /GOOGLE_CLIENT_ID/],
+    ['con GOOGLE_JWKS_URI (solo para pruebas)', { GOOGLE_JWKS_URI: 'http://localhost:4010/certs' }, /GOOGLE_JWKS_URI/],
   ])('rechaza producción %s', (_name, override, expected) => {
     const found = problems({ ...GOOD, ...override });
     expect(found.length).toBeGreaterThan(0);
@@ -37,6 +40,6 @@ describe('Configuración obligatoria en producción', () => {
   });
 
   it('informa TODOS los problemas a la vez (no de uno en uno)', () => {
-    expect(problems({ NODE_ENV: 'production' })).toHaveLength(3);
+    expect(problems({ NODE_ENV: 'production' })).toHaveLength(4);
   });
 });

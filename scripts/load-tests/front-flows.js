@@ -6,7 +6,7 @@
  * Requiere servidor corriendo y `npm run seed:reset` reciente. Crea usuarios y buses con sufijo único,
  * así que se puede repetir sin limpiar. Escribe fotos de prueba en la carpeta de subidas.
  */
-const { PASSWORD, tokenFor, makeApi } = require('./lib');
+const { loginAs, tokenFor, makeApi } = require('./lib');
 
 const BASE = process.argv[2] ?? 'http://localhost:3000';
 const ORIGIN = 'http://localhost:5173'; // donde corre el front con Vite
@@ -38,12 +38,8 @@ async function uploadPhoto(as, buffer = PNG, type = 'image/png') {
   return { status: r.status, body: await r.json().catch(() => ({})) };
 }
 
-const login = (employeeId, password) =>
-  fetch(`${BASE}/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ employeeId, password }),
-  }).then(async (r) => ({ status: r.status, body: await r.json().catch(() => ({})) }));
+/** Inicio de sesión de una persona prerregistrada con su correo de Google. */
+const login = (employeeId, email) => loginAs(BASE, employeeId, { email, sub: `sub-${employeeId}-${uid}` });
 
 (async () => {
   const ADMIN = '1001', ADMIN2 = '1002';
@@ -52,14 +48,14 @@ const login = (employeeId, password) =>
 
   // ───────────────────────── 0. CORS (el navegador lo exige) ─────────────────────────
   section('0. CORS: el front en el navegador puede llamar al back');
-  const preflight = await fetch(`${BASE}/auth/login`, {
+  const preflight = await fetch(`${BASE}/auth/google`, {
     method: 'OPTIONS',
     headers: { Origin: ORIGIN, 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'authorization,content-type' },
   });
   check('El preflight desde http://localhost:5173 se acepta', preflight.status === 204 && preflight.headers.get('access-control-allow-origin') === ORIGIN,
     `(${preflight.status}, origin=${preflight.headers.get('access-control-allow-origin')})`);
   check('El preflight permite el header Authorization', /authorization/i.test(preflight.headers.get('access-control-allow-headers') ?? ''));
-  const evilPreflight = await fetch(`${BASE}/auth/login`, { method: 'OPTIONS', headers: { Origin: 'https://sitio-malo.com', 'Access-Control-Request-Method': 'POST' } });
+  const evilPreflight = await fetch(`${BASE}/auth/google`, { method: 'OPTIONS', headers: { Origin: 'https://sitio-malo.com', 'Access-Control-Request-Method': 'POST' } });
   check('Un origen no autorizado NO recibe permiso CORS', evilPreflight.headers.get('access-control-allow-origin') !== 'https://sitio-malo.com');
 
   // ───────────────────────── 1. Panel del admin ─────────────────────────
@@ -87,22 +83,25 @@ const login = (employeeId, password) =>
   check('Un mecánico no puede editar buses → 403', (await api('PATCH', `/fleet/buses/${created.body.id}`, MECH_A, { model: 'X' })).status === 403);
 
   // ───────────────────────── 3. Usuarios ─────────────────────────
-  section('3. Pantalla "Usuarios": crear, editar, desactivar, contraseñas');
+  section('3. Pantalla "Usuarios": prerregistrar, editar, desactivar');
   const users = await api('GET', '/users', ADMIN);
-  check('El admin lista el personal (≥ 15 usuarios, sin contraseñas)', users.status === 200 && users.body.length >= 15 && !JSON.stringify(users.body).match(/passwordHash|\$2[aby]\$/));
+  check('El admin lista el personal (≥ 15 usuarios, con correo y sin contraseñas)', users.status === 200 && users.body.length >= 15 && users.body.every((u) => u.email) && !JSON.stringify(users.body).match(/password|\$2[aby]\$/i));
   check('Un conductor no puede listar usuarios → 403', (await api('GET', '/users', DRIVER_A)).status === 403);
 
   const newId = `N${uid}`;
-  const newUser = await api('POST', '/users', ADMIN, { employeeId: newId, name: 'Nuevo Conductor', role: 'DRIVER', password: 'Inicial2026' });
-  check('El admin crea un usuario', newUser.status === 201 && newUser.body.active === true && !('passwordHash' in newUser.body));
-  const dup = await api('POST', '/users', ADMIN, { employeeId: newId, name: 'Nombre Válido', role: 'DRIVER', password: 'Inicial2026' });
+  const newEmail = `nuevo${uid}@gmail.com`;
+  const newUser = await api('POST', '/users', ADMIN, { employeeId: newId, name: 'Nuevo Conductor', role: 'DRIVER', email: newEmail.toUpperCase() });
+  check('El admin prerregistra a una persona (el correo se guarda en minúsculas)', newUser.status === 201 && newUser.body.active === true && newUser.body.email === newEmail && !('passwordHash' in newUser.body));
+  const dup = await api('POST', '/users', ADMIN, { employeeId: newId, name: 'Nombre Válido', role: 'DRIVER', email: `otro${uid}@gmail.com` });
   check('Número de empleado repetido → 409 EMPLOYEE_ID_TAKEN', dup.status === 409 && dup.body.reason === 'EMPLOYEE_ID_TAKEN', `(${dup.status} ${dup.body.reason ?? dup.body.message})`);
-  const weak = await api('POST', '/users', ADMIN, { employeeId: `W${uid}`, name: 'Nombre Válido', role: 'DRIVER', password: 'abc' });
-  check('Contraseña débil → 400 WEAK_PASSWORD', weak.status === 400 && weak.body.reason === 'WEAK_PASSWORD', `(${weak.status} ${weak.body.reason ?? weak.body.message})`);
-  check('Rol inventado → 400', (await api('POST', '/users', ADMIN, { employeeId: `R${uid}`, name: 'Nombre Válido', role: 'SUPERUSER', password: 'Inicial2026' })).status === 400);
+  const dupMail = await api('POST', '/users', ADMIN, { employeeId: `E${uid}`, name: 'Nombre Válido', role: 'DRIVER', email: newEmail });
+  check('Correo repetido → 409 EMAIL_TAKEN', dupMail.status === 409 && dupMail.body.reason === 'EMAIL_TAKEN', `(${dupMail.status} ${dupMail.body.reason ?? dupMail.body.message})`);
+  const badMail = await api('POST', '/users', ADMIN, { employeeId: `W${uid}`, name: 'Nombre Válido', role: 'DRIVER', email: 'no-es-un-correo' });
+  check('Correo inválido → 400', badMail.status === 400, `(${badMail.status})`);
+  check('Rol inventado → 400', (await api('POST', '/users', ADMIN, { employeeId: `R${uid}`, name: 'Nombre Válido', role: 'SUPERUSER', email: `r${uid}@gmail.com` })).status === 400);
 
-  const firstLogin = await login(newId, 'Inicial2026');
-  check('El usuario nuevo inicia sesión con su contraseña inicial', firstLogin.status === 200 && firstLogin.body.user.role === 'DRIVER');
+  const firstLogin = await login(newId, newEmail);
+  check('La persona entra con su cuenta de Google y queda vinculada (primer ingreso)', firstLogin.status === 200 && firstLogin.body.user.role === 'DRIVER' && firstLogin.body.user.email === newEmail);
   const newToken = firstLogin.body.accessToken;
 
   const promoted = await api('PATCH', `/users/${newUser.body.id}`, ADMIN, { role: 'MECHANICAL', name: 'Nuevo Mecánico' });
@@ -111,34 +110,21 @@ const login = (employeeId, password) =>
   check('El cambio de rol aplica de inmediato, aun con el token anterior', meAfter.role === 'MECHANICAL');
 
   await api('PATCH', `/users/${newUser.body.id}`, ADMIN, { active: false });
-  check('Una cuenta desactivada ya no puede iniciar sesión → 401', (await login(newId, 'Inicial2026')).status === 401);
+  check('Una cuenta desactivada ya no puede iniciar sesión → 403', (await login(newId, newEmail)).status === 403);
   check('…y su token anterior deja de valer → 401', (await fetch(`${BASE}/auth/me`, { headers: { Authorization: `Bearer ${newToken}` } })).status === 401);
   await api('PATCH', `/users/${newUser.body.id}`, ADMIN, { active: true });
-  check('Al reactivarla recupera el acceso', (await login(newId, 'Inicial2026')).status === 200);
-
-  const reset = await api('POST', `/users/${newUser.body.id}/reset-password`, ADMIN, { newPassword: 'Restablecida2027' });
-  check('El admin restablece la contraseña → 204', reset.status === 204);
-  check('La contraseña vieja ya no sirve y la nueva sí',
-    (await login(newId, 'Inicial2026')).status === 401 && (await login(newId, 'Restablecida2027')).status === 200);
+  check('Al reactivarla recupera el acceso', (await login(newId, newEmail)).status === 200);
 
   const self = await api('GET', '/auth/me', ADMIN);
   check('Un admin no puede desactivarse a sí mismo → 409', (await api('PATCH', `/users/${self.body.id}`, ADMIN, { active: false })).status === 409);
   check('Un admin no puede quitarse el rol de administrador → 409', (await api('PATCH', `/users/${self.body.id}`, ADMIN, { role: 'DRIVER' })).status === 409);
 
-  const mine = await login(newId, 'Restablecida2027');
-  const meApi = (method, path, body) => fetch(`${BASE}${path}`, { method, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${mine.body.accessToken}` }, body: JSON.stringify(body) });
-  check('Cambiar MI contraseña con la actual incorrecta → 401', (await meApi('POST', '/auth/change-password', { currentPassword: 'mala', newPassword: 'Tercera2028' })).status === 401);
-  check('La nueva contraseña débil → 400', (await meApi('POST', '/auth/change-password', { currentPassword: 'Restablecida2027', newPassword: '123' })).status === 400);
-  check('La nueva igual a la actual → 409', (await meApi('POST', '/auth/change-password', { currentPassword: 'Restablecida2027', newPassword: 'Restablecida2027' })).status === 409);
-  check('Cambiar MI contraseña correctamente → 204', (await meApi('POST', '/auth/change-password', { currentPassword: 'Restablecida2027', newPassword: 'Tercera2028' })).status === 204);
-  check('Inicia sesión con la contraseña nueva', (await login(newId, 'Tercera2028')).status === 200);
-
   // ───────────────────────── 4. Asignar conductor a un bus ─────────────────────────
   section('4. Asignación de conductor a un bus');
-  const assignable = await api('POST', '/users', ADMIN, { employeeId: `D${uid}`, name: 'Conductor Libre', role: 'DRIVER', password: 'Inicial2026' });
+  const assignable = await api('POST', '/users', ADMIN, { employeeId: `D${uid}`, name: 'Conductor Libre', role: 'DRIVER', email: `libre${uid}@gmail.com` });
   const assigned = await api('PATCH', `/fleet/buses/${created.body.id}/driver`, ADMIN, { driverId: assignable.body.id });
   check('El admin asigna un conductor al bus nuevo', assigned.status === 200 && assigned.body.driverId === assignable.body.id && assigned.body.driver === 'Conductor Libre');
-  const home = await fetch(`${BASE}/fleet/home/operativo`, { headers: { Authorization: `Bearer ${await tokenFor(BASE, `D${uid}`, 'Inicial2026')}` } }).then((r) => r.json());
+  const home = await fetch(`${BASE}/fleet/home/operativo`, { headers: { Authorization: `Bearer ${await tokenFor(BASE, `D${uid}`, `libre${uid}@gmail.com`)}` } }).then((r) => r.json());
   check('El conductor ve ese bus en su home', home.plate === plate);
   check('Un conductor no puede tener dos buses → 409', (await api('PATCH', `/fleet/buses/${tmx1.id}/driver`, ADMIN, { driverId: assignable.body.id })).status === 409);
   check('Asignar un mecánico como conductor → 400', (await api('PATCH', `/fleet/buses/${created.body.id}/driver`, ADMIN, { driverId: (await api('GET', '/auth/me', MECH_A)).body.id })).status === 400);

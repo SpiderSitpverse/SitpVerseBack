@@ -11,7 +11,7 @@
  *  5. "Se quita": al llenarse los cupos la alerta desaparece para los demás conductores (y reaparece si se cancela).
  *  6. Tiempo real: el evento `call.closed` llega a los conductores cuando se llenan los cupos.
  *
- *   BASE_URL=http://localhost:3300 SEED_PASSWORD=... node scripts/load-tests/tow-flows.js
+ *   BASE_URL=http://localhost:3300 node scripts/load-tests/tow-flows.js
  */
 const { makeApi, tokenFor, listen } = require('./lib');
 

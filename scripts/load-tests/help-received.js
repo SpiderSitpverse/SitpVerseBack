@@ -9,7 +9,7 @@
  *  5. Una grúa en servicio bloquea el borrado aunque se use force.
  *  6. Una ruta alternativa asignada/aceptada pide confirmación, pero con force el incidente se puede eliminar.
  *
- *   BASE_URL=http://localhost:3300 SEED_PASSWORD=... node scripts/load-tests/help-received.js
+ *   BASE_URL=http://localhost:3300 node scripts/load-tests/help-received.js
  */
 const { makeApi } = require('./lib');
 

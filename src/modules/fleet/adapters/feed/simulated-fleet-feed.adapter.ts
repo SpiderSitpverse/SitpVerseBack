@@ -48,7 +48,7 @@ export class SimulatedFleetFeed implements OnModuleInit, OnModuleDestroy {
       return;
     }
     const intervalMs = this.config.get<number>('FLEET_SIMULATION_INTERVAL_MS', 3000);
-    this.timer = setInterval(() => void this.tick(), intervalMs);
+    this.timer = setInterval(() => this.tick().catch((err) => this.logger.error(`Ciclo del feed falló: ${err}`)), intervalMs);
     this.logger.log(`Feed simulado activo cada ${intervalMs}ms (reemplazable por la API real)`);
   }
 

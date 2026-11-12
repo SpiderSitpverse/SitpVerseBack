@@ -1,5 +1,4 @@
 import { PrismaClient, UserRole } from '@prisma/client';
-import { hash } from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
@@ -10,23 +9,27 @@ const prisma = new PrismaClient();
  *                         se puede correr varias veces (también contra una base ya en uso).
  *   npm run seed:reset    Borra TODOS los datos y los vuelve a crear (solo desarrollo y pruebas).
  *
- * La contraseña de todos los usuarios de demostración sale de SEED_PASSWORD
- * (por defecto "Sitp2026!"). Cámbiala si la base es visible fuera del equipo.
+ * No hay contraseñas: la identidad la verifica Google. Cada usuario de demostración lleva el correo con el que
+ * entra; el de los usuarios 1001 (ADMIN), 2001 (DRIVER) y 3001 (MECHANICAL) sale de SEED_ADMIN_EMAIL,
+ * SEED_DRIVER_EMAIL y SEED_MECHANIC_EMAIL (los de tu equipo). Los demás quedan con un correo ficticio
+ * `<empleado>@sitpverse.local`, que nadie puede usar para entrar: el admin los cambia desde la pantalla de usuarios.
  */
 const PRODUCTION = process.env.NODE_ENV === 'production';
 const RESET = process.argv.includes('--reset');
 
-// En producción NUNCA se siembra con la contraseña por defecto (está escrita en el repositorio): hay que
-// elegir una. Y borrar todo exige una confirmación explícita, para que un comando mal copiado no vacíe la base real.
-if (PRODUCTION && !process.env.SEED_PASSWORD) {
-  console.error('En producción define SEED_PASSWORD con la contraseña que tendrán los usuarios de demostración.');
-  process.exit(1);
-}
+// Borrar todo exige una confirmación explícita en producción, para que un comando mal copiado no vacíe la base real.
 if (PRODUCTION && RESET && process.env.CONFIRM_ERASE_EVERYTHING !== 'yes') {
   console.error('seed:reset BORRA TODA la base de datos. En producción exige CONFIRM_ERASE_EVERYTHING=yes.');
   process.exit(1);
 }
-const PASSWORD = process.env.SEED_PASSWORD ?? 'Sitp2026!';
+
+const TEAM_EMAILS: Record<string, string | undefined> = {
+  '1001': process.env.SEED_ADMIN_EMAIL,
+  '2001': process.env.SEED_DRIVER_EMAIL,
+  '3001': process.env.SEED_MECHANIC_EMAIL,
+};
+const emailOf = (employeeId: string) =>
+  (TEAM_EMAILS[employeeId]?.trim() || `${employeeId}@sitpverse.local`).toLowerCase();
 
 interface Demo {
   employeeId: string;
@@ -82,6 +85,9 @@ async function wipe() {
   await prisma.busPosition.deleteMany();
   await prisma.bus.deleteMany();
   await prisma.user.deleteMany();
+  await prisma.accessRequest.deleteMany();
+  // audit_log rechaza DELETE fila por fila (es de solo inserción); TRUNCATE solo existe para limpiar el entorno de pruebas.
+  await prisma.$executeRawUnsafe('TRUNCATE TABLE "audit_log"');
 }
 
 async function main() {
@@ -90,14 +96,12 @@ async function main() {
     console.log('Base de datos vaciada (--reset).');
   }
 
-  const passwordHash = await hash(PASSWORD, 10);
-
   const users = new Map<string, string>(); // employeeId → id
   for (const u of [...ADMINS, ...DRIVERS, ...MECHANICS]) {
     const saved = await prisma.user.upsert({
       where: { employeeId: u.employeeId },
-      update: { name: u.name, role: u.role, passwordHash },
-      create: { ...u, passwordHash },
+      update: { name: u.name, role: u.role, email: emailOf(u.employeeId) },
+      create: { ...u, email: emailOf(u.employeeId) },
     });
     users.set(u.employeeId, saved.id);
   }
@@ -115,7 +119,7 @@ async function main() {
 
   console.log(
     `Seed completado: ${ADMINS.length} ADMIN, ${DRIVERS.length} DRIVER y ${MECHANICS.length} MECHANICAL ` +
-      `(contraseña de demostración definida por SEED_PASSWORD) y ${BUSES.length} buses con conductor asignado.`,
+      `(entran con Google; el correo del 1001, 2001 y 3001 sale de SEED_*_EMAIL) y ${BUSES.length} buses con conductor asignado.`,
   );
 }
 

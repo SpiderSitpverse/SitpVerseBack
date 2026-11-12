@@ -1,27 +1,75 @@
 /**
- * Utilidades comunes de las pruebas contra el servidor REAL: inicia sesión con
- * `POST /auth/login` (una vez por usuario) y arma peticiones y sockets con el token.
- * La contraseña de los usuarios de demostración sale de SEED_PASSWORD (por defecto "Sitp2026!").
+ * Utilidades comunes de las pruebas contra el servidor REAL: inicia sesión con Google (contra el "Google" falso de
+ * `fake-google.js`) una vez por usuario y arma peticiones y sockets con el token.
+ *
+ * Requiere: `node scripts/load-tests/fake-google.js` y el servidor arrancado con
+ *   GOOGLE_JWKS_URI=http://127.0.0.1:4010/certs  GOOGLE_CLIENT_ID=sitpverse-test.apps.googleusercontent.com
+ * Los usuarios de demostración entran con `<empleado>@sitpverse.local` (el seed de pruebas no define SEED_*_EMAIL).
  */
 const { io } = require('socket.io-client');
 
-const PASSWORD = process.env.SEED_PASSWORD ?? 'Sitp2026!';
+const FAKE_GOOGLE = process.env.FAKE_GOOGLE_URL ?? 'http://127.0.0.1:4010';
 const tokens = new Map(); // `${base}|${employeeId}` → Promise<accessToken>
 
-/** Devuelve el token del usuario, iniciando sesión la primera vez. */
-function tokenFor(base, employeeId, password = PASSWORD) {
-  const key = `${base}|${employeeId}|${password}`;
+/** Correo con el que entra cada usuario de demostración. */
+const emailOf = (employeeId) => `${employeeId}@sitpverse.local`.toLowerCase();
+
+// Arranca en un punto al azar: dos ejecuciones seguidas no repiten IP (el límite por IP dura 1 minuto).
+let counter = Math.floor(Math.random() * 0xffffff);
+/** Cada inicio de sesión sale de una IP distinta (X-Forwarded-For): el límite por IP no se mezcla entre usuarios de prueba. */
+const fakeIp = () => {
+  counter = (counter + 1) & 0xffffff;
+  return `10.${(counter >> 16) & 255}.${(counter >> 8) & 255}.${counter & 255}`;
+};
+
+/** Pide un nonce al servidor. */
+async function getNonce(base, ip = fakeIp()) {
+  const r = await fetch(`${base}/auth/nonce`, { headers: { 'X-Forwarded-For': ip } });
+  return (await r.json()).nonce;
+}
+
+/** El Google falso firma un ID token con lo que se pida (ver `fake-google.js`). */
+async function signIdToken(spec) {
+  const r = await fetch(`${FAKE_GOOGLE}/sign`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(spec),
+  });
+  return (await r.json()).idToken;
+}
+
+/** POST /auth/google. Devuelve { status, body, headers }. */
+async function googleLogin(base, idToken, nonce, ip = fakeIp()) {
+  const r = await fetch(`${base}/auth/google`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': ip },
+    body: JSON.stringify({ idToken, nonce }),
+  });
+  return { status: r.status, body: await r.json().catch(() => ({})), headers: r.headers };
+}
+
+/** Inicio de sesión completo como `employeeId` (o con un correo propio). Devuelve { status, body, headers }. */
+async function loginAs(base, employeeId, over = {}) {
+  const ip = over.ip ?? fakeIp();
+  const nonce = over.nonce ?? (await getNonce(base, ip));
+  const idToken = await signIdToken({
+    email: over.email ?? emailOf(employeeId),
+    sub: over.sub ?? `sub-${employeeId}`,
+    nonce,
+    ...over.token,
+  });
+  return googleLogin(base, idToken, nonce, ip);
+}
+
+/** Devuelve el token de sesión del usuario, iniciando sesión la primera vez. */
+function tokenFor(base, employeeId, email) {
+  const key = `${base}|${employeeId}|${email ?? ''}`;
   if (!tokens.has(key)) {
     tokens.set(
       key,
-      fetch(`${base}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ employeeId, password }),
-      }).then(async (r) => {
-        const body = await r.json();
-        if (!r.ok) throw new Error(`login ${employeeId} falló (${r.status}): ${body.message}`);
-        return body.accessToken;
+      loginAs(base, employeeId, email ? { email } : {}).then((r) => {
+        if (r.status !== 200) throw new Error(`login ${employeeId} falló (${r.status}): ${r.body.message}`);
+        return r.body.accessToken;
       }),
     );
   }
@@ -53,4 +101,4 @@ async function listen(base, employeeId, lastSeq) {
   return { socket, events, positions };
 }
 
-module.exports = { PASSWORD, tokenFor, makeApi, listen };
+module.exports = { emailOf, fakeIp, getNonce, signIdToken, googleLogin, loginAs, tokenFor, makeApi, listen };

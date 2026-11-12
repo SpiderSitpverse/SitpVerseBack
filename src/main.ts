@@ -6,6 +6,9 @@ import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { RealtimeIoAdapter } from './realtime/websocket/realtime-io.adapter';
 import { AppErrorFilter } from './shared/http/app-error.filter';
+import { REQUEST_SINK } from './modules/identity/public';
+import { RequestSinkPort } from './shared/domain/request-sink.port';
+import { requestLogger } from './shared/http/request-logger';
 import { productionConfigProblems } from './shared/infrastructure/production-config';
 import {
   LocalFileStorage,
@@ -26,9 +29,15 @@ async function bootstrap() {
   // usuarios parecerían tener la IP del proxy y el límite de intentos de login los bloquearía a todos juntos.
   app.set('trust proxy', 1);
 
+  // Registro de cada petición (con trace_id, también en el header X-Trace-Id). Va antes de todo para verlas todas.
+  app.use(requestLogger(app.get<RequestSinkPort>(REQUEST_SINK)));
+
   // Cabeceras de seguridad. `cross-origin` en recursos: el front vive en OTRO origen y pinta las fotos con <img>.
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
-  app.enableCors({ origin: config.get<string>('CORS_ORIGIN', '*').split(',').map((o) => o.trim()) });
+  app.enableCors({
+    origin: config.get<string>('CORS_ORIGIN', '*').split(',').map((o) => o.trim()),
+    exposedHeaders: ['X-Trace-Id', 'Retry-After'], // el front puede leerlos (rastrear un error, cuenta regresiva del 429)
+  });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.useGlobalFilters(new AppErrorFilter()); // errores de dominio → 400 / 401 / 403 / 404 / 409 / 429 / 503
   app.useWebSocketAdapter(new RealtimeIoAdapter(app));
