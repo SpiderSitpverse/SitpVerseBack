@@ -14,6 +14,7 @@ import {
   LocalFileStorage,
   UPLOADS_URL_PREFIX,
 } from './shared/infrastructure/storage/local-file-storage';
+import { TelemetryInterceptor } from './shared/infrastructure/telemetry.interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -40,6 +41,7 @@ async function bootstrap() {
   });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.useGlobalFilters(new AppErrorFilter()); // errores de dominio → 400 / 401 / 403 / 404 / 409 / 429 / 503
+  app.useGlobalInterceptors(app.get(TelemetryInterceptor)); // métricas Prometheus por ruta (GET /metrics)
   app.useWebSocketAdapter(new RealtimeIoAdapter(app));
   app.enableShutdownHooks(); // cierra Prisma y Redis limpiamente con SIGTERM
 

@@ -19,6 +19,7 @@ import {
 } from '../../domain/assistance.policy';
 import { ROLE_FOR_KIND } from '../../domain/models/assistance.models';
 import { assistanceEvent } from '../assistance-event.factory';
+import { currentTraceIdOrNew } from '../../../../shared/telemetry-context';
 
 /** Una clave por alerta: solo compiten entre sí quienes aceptan LA MISMA alerta. */
 export const callLockKey = (callId: string) => `lock:assistance-call:${callId}`;
@@ -46,7 +47,7 @@ export class AcceptCallUseCase {
     private readonly config: ConfigService,
   ) {}
 
-  async execute(actor: AuthenticatedUser, callId: string, traceId = randomUUID()) {
+  async execute(actor: AuthenticatedUser, callId: string, traceId = currentTraceIdOrNew()) {
     const call = await this.repo.findCall(callId);
     if (!call) throw new NotFoundError(CLAIM_FAILURE_MESSAGE.NOT_FOUND);
 

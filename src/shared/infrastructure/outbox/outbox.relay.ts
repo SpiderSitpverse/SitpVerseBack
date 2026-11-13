@@ -4,6 +4,7 @@ import Redis from 'ioredis';
 import { PrismaService } from '../prisma.service';
 import { REDIS_RELAY_CLIENT } from '../redis.provider';
 import { logEvent } from '../structured-log';
+import { MetricsService } from '../metrics.service';
 
 interface PendingRow {
   id: bigint;
@@ -53,6 +54,7 @@ export class OutboxRelay implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
     @Inject(REDIS_RELAY_CLIENT) private readonly redis: Redis,
     private readonly config: ConfigService,
+    private readonly metrics: MetricsService,
   ) {}
 
   onModuleInit() {
@@ -107,11 +109,21 @@ export class OutboxRelay implements OnModuleInit, OnModuleDestroy {
           await withTimeout(
             this.redis.xadd(
               row.channel, 'MAXLEN', '~', STREAM_MAX_LEN, '*',
-              'data', JSON.stringify({ ...row.payload, seq: row.id.toString() }),
+              'data', JSON.stringify({
+                ...row.payload,
+                seq: row.id.toString(),
+                publishedAt: new Date().toISOString(),
+              }),
             ),
             PUBLISH_TIMEOUT_MS,
           );
           done.push(row.id);
+          this.metrics.increment('sitpverse_outbox_published_total', { channel: row.channel });
+          this.metrics.observe(
+            'sitpverse_outbox_lag_ms',
+            Date.now() - row.createdAt.getTime(),
+            { channel: row.channel },
+          );
         }
       } catch (err) {
         // Redis caído: lo ya publicado se marca igual; el resto queda pendiente y se reintenta.
@@ -120,6 +132,9 @@ export class OutboxRelay implements OnModuleInit, OnModuleDestroy {
           severity: lagMs > LAG_WARN_MS ? 'ERROR' : 'WARN',
           pending_lag_ms: lagMs,
           error: String(err),
+        });
+        this.metrics.increment('sitpverse_outbox_publish_failures_total', {
+          channel: rows[0].channel,
         });
       }
 

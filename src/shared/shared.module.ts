@@ -7,6 +7,8 @@ import { LocalFileStorage } from './infrastructure/storage/local-file-storage';
 import { PrismaService } from './infrastructure/prisma.service';
 import { RedisDistributedLock } from './infrastructure/redis-distributed-lock';
 import { RedisPublisherProvider, RedisRelayProvider } from './infrastructure/redis.provider';
+import { MetricsService } from './infrastructure/metrics.service';
+import { TelemetryService } from './infrastructure/telemetry';
 
 /**
  * Infraestructura transversal compartida por todos los módulos:
@@ -25,6 +27,8 @@ import { RedisPublisherProvider, RedisRelayProvider } from './infrastructure/red
     OutboxReader,
     LocalFileStorage,
     { provide: FILE_STORAGE, useExisting: LocalFileStorage },
+    MetricsService,
+    TelemetryService,
   ],
   exports: [
     PrismaService,
@@ -34,6 +38,8 @@ import { RedisPublisherProvider, RedisRelayProvider } from './infrastructure/red
     OutboxReader,
     FILE_STORAGE,
     LocalFileStorage,
+    MetricsService,
+    TelemetryService,
   ],
 })
 export class SharedModule {}

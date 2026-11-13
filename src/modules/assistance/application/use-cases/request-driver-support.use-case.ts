@@ -7,6 +7,7 @@ import {
   AssistanceRepositoryPort,
 } from '../../domain/ports/assistance-repository.port';
 import { assistanceEvent } from '../assistance-event.factory';
+import { currentTraceIdOrNew } from '../../../../shared/telemetry-context';
 
 /**
  * Uso 1 · paso 2: el admin lanza la alerta de apoyo a los conductores indicando
@@ -25,7 +26,7 @@ export class RequestDriverSupportUseCase {
     actor: AuthenticatedUser,
     incidentId: string,
     data: { slots: number; rewardPoints: number },
-    traceId = randomUUID(),
+    traceId = currentTraceIdOrNew(),
   ) {
     const incident = await this.repo.findIncident(incidentId);
     if (!incident) throw new NotFoundError(`Incidente ${incidentId} no encontrado`);

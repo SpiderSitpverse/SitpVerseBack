@@ -17,6 +17,7 @@ import {
 import { OutboxReader } from '../../shared/infrastructure/outbox/outbox.reader';
 import { AuthenticatedUser, AuthenticateTokenUseCase } from '../../modules/identity/public';
 import type { BusPositionEvent } from '../../modules/fleet/public';
+import { MetricsService } from '../../shared/infrastructure/metrics.service';
 
 /** Quién ve el mapa de la flota en tiempo real: administración y mecánicos (el conductor no). */
 const FLEET_MAP_ROLES = ['ADMIN', 'MECHANICAL'];
@@ -44,6 +45,7 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   constructor(
     private readonly authenticate: AuthenticateTokenUseCase,
     private readonly outbox: OutboxReader,
+    private readonly metrics: MetricsService,
   ) {}
 
   async handleConnection(client: Socket) {
@@ -57,20 +59,25 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
         return;
       }
       client.join([roleRoom(user.role), userRoom(user.id)]);
+      this.metrics.increment('sitpverse_websocket_connections_total', { result: 'identified' });
       client.emit(SOCKET_EVENTS.IDENTIFIED, { role: user.role, name: user.name });
       this.logger.log(`Cliente ${client.id} identificado como ${user.role}`);
 
       if (lastSeq !== undefined) await this.replayMissed(client, user, lastSeq);
     } catch (err) {
+      this.metrics.increment('sitpverse_websocket_connection_errors_total');
       this.logger.error(`No se pudo identificar/reproducir para ${client.id}: ${err}`);
     }
   }
 
   handleDisconnect(client: Socket) {
+    this.metrics.increment('sitpverse_websocket_disconnects_total');
     this.logger.log(`Cliente desconectado: ${client.id}`);
   }
 
   broadcastPositionUpdate(event: BusPositionEvent) {
+    this.metrics.increment('sitpverse_websocket_events_sent_total', { event: 'fleet_position' });
+    this.observeEventLatency(event.updatedAt, 'fleet_position');
     this.server.to(FLEET_MAP_ROLES.map(roleRoom)).emit(SOCKET_EVENTS.FLEET_POSITION, event);
   }
 
@@ -80,7 +87,21 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
       ...(event.audience.userIds ?? []).map(userRoom),
     ];
     if (rooms.length === 0) return;
+    const eventType = event.type ?? 'unknown';
+    this.metrics.increment('sitpverse_websocket_events_sent_total', { event: eventType });
+    this.observeEventLatency(
+      typeof event.publishedAt === 'string' ? event.publishedAt : event.occurredAt,
+      eventType,
+    );
     this.server.to(rooms).emit(SOCKET_EVENTS.ASSISTANCE, event);
+  }
+
+  private observeEventLatency(timestamp: string | undefined, event: string) {
+    if (!timestamp) return;
+    const latencyMs = Date.now() - Date.parse(timestamp);
+    if (Number.isFinite(latencyMs) && latencyMs >= 0) {
+      this.metrics.observe('sitpverse_realtime_delivery_latency_ms', latencyMs, { event });
+    }
   }
 
   /** Entrega, en orden, las alertas posteriores a `lastSeq` que correspondan a este usuario. */

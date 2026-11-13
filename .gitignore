@@ -20,3 +20,6 @@ coverage/
 # fotos de evidencia subidas por los usuarios
 /uploads/
 coverage-integration/
+
+# Token de sesión para la prueba de carga contra Azure (credencial, nunca se sube)
+.quality-token
