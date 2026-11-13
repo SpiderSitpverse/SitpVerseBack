@@ -4,10 +4,12 @@
  *
  * Requires the API, PostgreSQL, Redis and seed data to be running.
  * QUALITY_REQUESTS and QUALITY_P95_MS can tune the workload and acceptance threshold.
- * Authentication: QUALITY_TOKEN (session token of an ADMIN user) against a real deployment; without it the script logs in
+ * Authentication: QUALITY_TOKEN or the git-ignored file .quality-token (session token of an ADMIN user) against a real deployment; without it the script logs in
  * as employee 1001 through the fake Google IdP (scripts/load-tests/fake-google.js), as the other integration scripts do.
  */
 const { io } = require('socket.io-client');
+const fs = require('fs');
+const path = require('path');
 const { tokenFor } = require('./lib');
 
 const BASE = process.argv[2] ?? 'http://localhost:3000';
@@ -36,8 +38,17 @@ const call = (method, path, authenticated, body) => {
   });
 };
 
+/** Token de sesión guardado en `.quality-token` (ignorado por git) en la raíz del proyecto. */
+function readTokenFile() {
+  try {
+    return fs.readFileSync(path.join(__dirname, '..', '..', '.quality-token'), 'utf8').trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 async function main() {
-  TOKEN = process.env.QUALITY_TOKEN ?? (await tokenFor(BASE, '1001'));
+  TOKEN = process.env.QUALITY_TOKEN ?? readTokenFile() ?? (await tokenFor(BASE, '1001'));
   const checks = [];
   const check = (name, ok, detail = '') => {
     checks.push(ok);
