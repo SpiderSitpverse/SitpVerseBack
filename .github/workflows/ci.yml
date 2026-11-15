@@ -62,6 +62,7 @@ jobs:
       # llaves públicas de prueba y firma ID tokens, incluidos los inválidos. GOOGLE_JWKS_URI solo se acepta fuera de producción.
       GOOGLE_CLIENT_ID: sitpverse-test.apps.googleusercontent.com
       GOOGLE_JWKS_URI: http://127.0.0.1:4010/certs
+      RATE_LIMIT_PER_MINUTE: 100000 # las pruebas de carga superan el límite normal con pocos usuarios
       STOP_FILE: coverage-integration/stop
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4

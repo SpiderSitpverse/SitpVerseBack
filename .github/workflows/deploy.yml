@@ -45,11 +45,12 @@ jobs:
 
       - name: Armar el paquete
         run: |
-          mkdir deploy
-          cp -r dist node_modules prisma package.json package-lock.json deploy/
+          # La carpeta `deploy/` del repositorio guarda la configuración de Prometheus y Grafana: el paquete va en otra.
+          mkdir azure-package
+          cp -r dist node_modules prisma package.json package-lock.json azure-package/
 
       - uses: azure/webapps-deploy@02a81bead70021f5284939794bcec79c271ab383 # v3
         with:
           app-name: ${{ vars.AZURE_WEBAPP_NAME }}
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-          package: deploy
+          package: azure-package
