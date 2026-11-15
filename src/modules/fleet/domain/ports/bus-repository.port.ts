@@ -18,11 +18,12 @@ export interface BusRepositoryPort {
    * `ConflictError` y NO sobrescribe. Evita resucitar buses y dobles inicios de viaje.
    */
   save(bus: Bus): Promise<void>;
-  appendPositionHistory(
-    busId: string,
-    latitude: number,
-    longitude: number,
-  ): Promise<void>;
+  /**
+   * Camino LIGERO de la posición GPS (20 por segundo en hora pico): mueve el bus y guarda el punto en el historial en
+   * UNA sola sentencia. Mismo compare-and-set que `save`: si el bus ya no está en el estado leído, lanza
+   * `ConflictError` y no escribe nada (ni la posición ni el historial).
+   */
+  savePosition(bus: Bus): Promise<void>;
 
   /** Registra un bus nuevo. Lanza `ConflictError` si la placa ya existe. */
   create(data: BusDetails & { plate: string; route: string }): Promise<Bus>;

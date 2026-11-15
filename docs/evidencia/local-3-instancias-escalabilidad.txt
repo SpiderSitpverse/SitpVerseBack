@@ -1,0 +1,27 @@
+ESC-DISP-01 (escalabilidad) contra http://localhost:8080: escalones de 4, 8, 16, 32, 64, 96 clientes sin pausa, 10 s cada uno
+
+3 instancias     4 clientes    227.7 pet/s   p50=9ms p95=57ms p99=94ms  errores=0  
+3 instancias     8 clientes    218.5 pet/s   p50=15ms p95=124ms p99=255ms  errores=0  
+3 instancias    16 clientes    293.9 pet/s   p50=23ms p95=177ms p99=275ms  errores=0  
+3 instancias    32 clientes    294.4 pet/s   p50=89ms p95=315ms p99=475ms  errores=0  
+3 instancias    64 clientes    353.4 pet/s   p50=147ms p95=476ms p99=691ms  errores=0  
+3 instancias    96 clientes    346.8 pet/s   p50=214ms p95=697ms p99=856ms  errores=0  (fuera de p95 ≤ 500 ms: no cuenta)
+3 instancias  capacidad sostenida: 353.4 pet/s (p95=476ms con 64 clientes)
+
+>>> docker stop sitpverse-cluster-api-2-1 sitpverse-cluster-api-3-1
+1 instancia      4 clientes    107.0 pet/s   p50=11ms p95=85ms p99=97ms  errores=0  
+1 instancia      8 clientes    121.5 pet/s   p50=19ms p95=102ms p99=1018ms  errores=0  
+1 instancia     16 clientes    147.9 pet/s   p50=98ms p95=192ms p99=1010ms  errores=0  
+1 instancia     32 clientes    151.6 pet/s   p50=198ms p95=309ms p99=1099ms  errores=0  
+1 instancia     64 clientes    148.5 pet/s   p50=402ms p95=701ms p99=1484ms  errores=0  (fuera de p95 ≤ 500 ms: no cuenta)
+1 instancia     96 clientes    155.2 pet/s   p50=603ms p95=893ms p99=1871ms  errores=0  (fuera de p95 ≤ 500 ms: no cuenta)
+1 instancia   capacidad sostenida: 151.6 pet/s (p95=309ms con 32 clientes)
+
+>>> docker start sitpverse-cluster-api-2-1 sitpverse-cluster-api-3-1
+
+Con 3 instancias: 2.33 veces las peticiones por segundo de 1 instancia
+PASS  3 instancias sostienen al menos 1,5 veces el caudal de 1  (2.33×)
+PASS  …con p95 ≤ 500 ms  (p95=476ms)
+PASS  …y sin errores  (errores=0)
+
+TODO OK: ESC-DISP-01 (escalabilidad)

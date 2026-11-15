@@ -9,6 +9,7 @@ import {
   PositionPublisherPort,
 } from '../../domain/ports/position-publisher.port';
 import { currentTraceIdOrNew } from '../../../../shared/telemetry-context';
+import { Bus } from '../../domain/entities/bus.entity';
 
 /**
  * HU-49 (parte 2): Actualizar posición en tiempo real.
@@ -28,16 +29,19 @@ export class UpdateBusPositionUseCase {
     private readonly positionPublisher: PositionPublisherPort,
   ) {}
 
-  async execute(busId: string, latitude: number, longitude: number) {
-    const bus = await this.busRepository.findById(busId);
+  /**
+   * `target` es el id del bus o el bus YA cargado (el controller lo acaba de leer para autorizar al conductor: no se
+   * vuelve a consultar; con 20 posiciones por segundo, cada consulta de menos cuenta).
+   */
+  async execute(target: string | Bus, latitude: number, longitude: number) {
+    const bus = typeof target === 'string' ? await this.busRepository.findById(target) : target;
     if (!bus) {
-      throw new NotFoundError(`Bus ${busId} no encontrado`);
+      throw new NotFoundError(`Bus ${String(target)} no encontrado`);
     }
 
     bus.updatePosition(latitude, longitude);
 
-    await this.busRepository.save(bus);
-    await this.busRepository.appendPositionHistory(busId, latitude, longitude);
+    await this.busRepository.savePosition(bus);
 
     await this.positionPublisher.publish({
       busId: bus.id,

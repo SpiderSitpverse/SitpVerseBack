@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Bus as PrismaBus, BusStatus as PrismaBusStatus, Prisma } from '@prisma/client';
 import { ConflictError, NotFoundError } from '../../../../shared/domain/errors';
 import { PrismaService } from '../../../../shared/infrastructure/prisma.service';
+import { withPendingAudit } from '../../../../shared/infrastructure/pending-audit';
 import { Bus, BusDetails } from '../../domain/entities/bus.entity';
 import { BusRepositoryPort } from '../../domain/ports/bus-repository.port';
 import { BusStatus } from '../../domain/value-objects/bus-status.enum';
@@ -41,7 +42,7 @@ export class PrismaBusRepository implements BusRepositoryPort {
 
   async save(bus: Bus): Promise<void> {
     const props = bus.toPersistence();
-    const { count } = await this.prisma.bus.updateMany({
+    const { count } = await withPendingAudit(this.prisma, (db) => db.bus.updateMany({
       // Compare-and-set: solo escribe si nadie cambió el estado desde que se leyó.
       where: { id: props.id, status: bus.expectedStatus as PrismaBusStatus },
       data: {
@@ -50,7 +51,7 @@ export class PrismaBusRepository implements BusRepositoryPort {
         longitude: props.longitude,
         tripStartedAt: props.tripStartedAt,
       },
-    });
+    }));
     if (count === 0) {
       throw new ConflictError(
         `El bus ${props.plate} cambió de estado mientras se procesaba la operación`,
@@ -61,7 +62,7 @@ export class PrismaBusRepository implements BusRepositoryPort {
 
   async create(data: BusDetails & { plate: string; route: string }): Promise<Bus> {
     try {
-      const row = await this.prisma.bus.create({ data, include: WITH_DRIVER });
+      const row = await withPendingAudit(this.prisma, (db) => db.bus.create({ data, include: WITH_DRIVER }));
       return this.toDomain(row);
     } catch (error) {
       throw this.translate(error);
@@ -70,7 +71,7 @@ export class PrismaBusRepository implements BusRepositoryPort {
 
   async updateDetails(id: string, data: BusDetails): Promise<Bus> {
     try {
-      const row = await this.prisma.bus.update({ where: { id }, data, include: WITH_DRIVER });
+      const row = await withPendingAudit(this.prisma, (db) => db.bus.update({ where: { id }, data, include: WITH_DRIVER }));
       return this.toDomain(row);
     } catch (error) {
       throw this.translate(error);
@@ -79,7 +80,9 @@ export class PrismaBusRepository implements BusRepositoryPort {
 
   async assignDriver(busId: string, driverId: string | null): Promise<Bus> {
     try {
-      const row = await this.prisma.bus.update({ where: { id: busId }, data: { driverId }, include: WITH_DRIVER });
+      const row = await withPendingAudit(this.prisma, (db) =>
+        db.bus.update({ where: { id: busId }, data: { driverId }, include: WITH_DRIVER }),
+      );
       return this.toDomain(row);
     } catch (error) {
       throw this.translate(error);
@@ -114,14 +117,25 @@ export class PrismaBusRepository implements BusRepositoryPort {
     return error;
   }
 
-  async appendPositionHistory(
-    busId: string,
-    latitude: number,
-    longitude: number,
-  ): Promise<void> {
-    await this.prisma.busPosition.create({
-      data: { busId, latitude, longitude },
-    });
+  async savePosition(bus: Bus): Promise<void> {
+    const props = bus.toPersistence();
+    // Una sola ida a la base: el UPDATE (con compare-and-set) y el INSERT del historial van en la misma sentencia,
+    // así que o se guardan los dos o ninguno.
+    const inserted = await this.prisma.$executeRaw`
+      WITH moved AS (
+        UPDATE "buses"
+           SET "latitude" = ${props.latitude}, "longitude" = ${props.longitude}, "updatedAt" = NOW()
+         WHERE "id" = ${props.id} AND "status" = ${bus.expectedStatus}::"BusStatus"
+        RETURNING "id"
+      )
+      INSERT INTO "bus_positions" ("id", "busId", "latitude", "longitude")
+      SELECT gen_random_uuid()::text, "id", ${props.latitude}, ${props.longitude} FROM moved`;
+    if (inserted === 0) {
+      throw new ConflictError(
+        `El bus ${props.plate} cambió de estado mientras se procesaba la operación`,
+        { plate: props.plate, reason: 'STALE_STATE' },
+      );
+    }
   }
 
   private toDomain(row: BusRow): Bus {

@@ -14,14 +14,17 @@ import {
 } from './application/use-cases/manage-buses.use-cases';
 import { FinishTripUseCase } from './application/use-cases/finish-trip.use-case';
 import { GetBusDetailUseCase } from './application/use-cases/get-bus-detail.use-case';
+import { GetBusHistoryUseCase } from './application/use-cases/get-bus-history.use-case';
 import { GetOperativeHomeUseCase } from './application/use-cases/get-operative-home.use-case';
 import { ListBusesUseCase } from './application/use-cases/list-buses.use-case';
 import { StartTripUseCase } from './application/use-cases/start-trip.use-case';
 import { UpdateBusPositionUseCase } from './application/use-cases/update-bus-position.use-case';
+import { BUS_HISTORY } from './domain/ports/bus-history.port';
 import { BUS_REPOSITORY } from './domain/ports/bus-repository.port';
 import { DRIVER_DIRECTORY } from './domain/ports/driver-directory.port';
 import { POSITION_PUBLISHER } from './domain/ports/position-publisher.port';
 import { IdentityDriverDirectory } from './infrastructure/identity/identity-driver-directory.adapter';
+import { PrismaBusHistory } from './infrastructure/prisma/bus-history.query';
 import { PrismaBusRepository } from './infrastructure/prisma/bus.repository';
 import { RedisPositionPublisher } from './infrastructure/redis/redis-position-publisher';
 
@@ -36,6 +39,7 @@ import { RedisPositionPublisher } from './infrastructure/redis/redis-position-pu
     // Casos de uso
     ListBusesUseCase,
     GetBusDetailUseCase,
+    GetBusHistoryUseCase,
     StartTripUseCase,
     UpdateBusPositionUseCase,
     FinishTripUseCase,
@@ -54,6 +58,7 @@ import { RedisPositionPublisher } from './infrastructure/redis/redis-position-pu
 
     // Puerto → adapter (la pieza clave de hexagonal en Nest)
     { provide: BUS_REPOSITORY, useClass: PrismaBusRepository },
+    { provide: BUS_HISTORY, useClass: PrismaBusHistory },
     { provide: POSITION_PUBLISHER, useClass: RedisPositionPublisher },
     { provide: DRIVER_DIRECTORY, useClass: IdentityDriverDirectory },
   ],

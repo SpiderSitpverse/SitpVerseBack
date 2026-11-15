@@ -8,7 +8,6 @@ import { InspectionsModule } from './modules/inspections/public';
 import { UploadsModule } from './modules/uploads/public';
 import { RealtimeModule } from './realtime/realtime.module';
 import { SharedModule } from './shared/shared.module';
-import { TelemetryInterceptor } from './shared/infrastructure/telemetry.interceptor';
 
 @Module({
   imports: [
@@ -28,6 +27,5 @@ import { TelemetryInterceptor } from './shared/infrastructure/telemetry.intercep
     RealtimeModule,
     // Pendiente según el story map: ReportingModule (KPIs y dashboard)
   ],
-  providers: [TelemetryInterceptor],
 })
 export class AppModule {}

@@ -40,11 +40,18 @@ export interface AuditQuery {
   before?: Date;
 }
 
+/** Fila de auditoría ya armada, con su `id`: el mismo registro se puede insertar varias veces sin duplicarse. */
+export type PendingAudit = { id: string } & Record<string, unknown>;
+
 /**
  * Puerto de AUDITORÍA (solo inserción). Lo implementa identity (dueño de la tabla) y los demás módulos lo reciben
  * por `public.ts`. No ofrece ninguna operación que modifique o borre registros.
  */
 export interface AuditLogPort {
   record(entry: AuditEntry): Promise<void>;
+  /** Arma el registro de una acción en curso, con `id` fijo, para insertarlo en la transacción del cambio. */
+  prepare(entry: AuditEntry): PendingAudit;
+  /** Asegura que el registro pendiente quedó guardado (no lo duplica si ya se insertó en la transacción). */
+  confirm(pending: PendingAudit): Promise<void>;
   list(query: AuditQuery): Promise<AuditRecord[]>;
 }

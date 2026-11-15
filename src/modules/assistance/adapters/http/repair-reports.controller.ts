@@ -10,7 +10,7 @@ import {
   MaxLength,
   ValidateNested,
 } from 'class-validator';
-import { AuthenticatedUser, CurrentUser, Roles } from '../../../identity/public';
+import { Audited, AuthenticatedUser, CurrentUser, Roles } from '../../../identity/public';
 import {
   GetAssistanceSummaryUseCase,
   GetRepairReportUseCase,
@@ -50,6 +50,7 @@ export class RepairReportsController {
    * acredita el bono). Solo el mecánico que aceptó esa reparación. 409 si el informe ya es definitivo.
    */
   @Put('calls/:id/repair-report')
+  @Audited('repair_report.save', 'call', 'params.id')
   @Roles('MECHANICAL')
   save(
     @CurrentUser() user: AuthenticatedUser,

@@ -1,0 +1,29 @@
+ESC-DISP-01 contra http://localhost:8080: 60 buses cada 3 s, 140 oyentes; falla a los 20 s, 40 s con la instancia caída
+
+PASS  Las 3 instancias están vivas antes de la falla  (instancias=3)
+PASS  Conectados los 200 clientes por WebSocket  (200/200)
+PASS  Alerta de apoyo de 3 cupos abierta antes de la falla  (status 201)
+
+>>> docker kill sitpverse-cluster-api-2-1
+>>> docker start sitpverse-cluster-api-2-1
+
+Posiciones: 1618 en total, 807 durante la falla; 0 necesitaron reintento; 0 intentos fallidos antes del reintento
+Tiempo en registrar cada posición (con reintentos)   n=1618 p50=22ms p95=89ms p99=1024ms max=1118ms
+Sockets que atendía la instancia caída: 64 de 200; reconexión n=64 p50=651ms p95=1717ms p99=1777ms max=1777ms
+Mayor hueco entre dos posiciones de un mismo bus: 4529 ms
+Eventos de posición recibidos por los oyentes: 225700
+
+PASS  Instancia fuera del balanceador en 2 min o menos  (último intento fallido 0 ms después de la falla)
+PASS  La caída se ve en las métricas (tablero técnico) en 30 s o menos  (9007 ms)
+PASS  La falla afectó de verdad a clientes conectados  (64 sockets cortados)
+PASS  100 % de los sockets reconectados en 20 s o menos  (sin reconectar=0 máx=1777ms)
+PASS  99 % o más de las posiciones GPS registradas en 6 s o menos  (100.00 %)
+PASS  Ningún bus pasó a «Sin señal» (más de 15 s sin posición)  (mayor hueco 4529 ms)
+PASS  Errores HTTP visibles para el usuario ≤ 1 % durante la falla  (0.00 % de 807)
+PASS  0 % de errores después de la falla  (0.00 % de 617)
+PASS  0 alertas perdidas: la alerta enviada durante la falla llegó a los 60 conductores  (60/60)
+PASS  0 sobreasignaciones: 12 aceptaciones durante la falla → exactamente 3 cupos tomados  (éxitos=3 cupos tomados=3)
+PASS  Ningún bus cambió de estado por la falla (los 60 siguen en servicio)  (60/60)
+PASS  Al arrancar de nuevo, la instancia vuelve al grupo (3 vivas)  (instancias=3)
+
+TODO OK: ESC-DISP-01 (disponibilidad)

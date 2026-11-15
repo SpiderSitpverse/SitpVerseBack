@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { BusInspection } from '@prisma/client';
 import { PrismaService } from '../../../../shared/infrastructure/prisma.service';
+import { withPendingAudit } from '../../../../shared/infrastructure/pending-audit';
 import { InspectionFilter, InspectionModel, NewInspection } from '../../domain/models/inspection.models';
 import { InspectionRepositoryPort } from '../../domain/ports/inspection-repository.port';
 
@@ -10,7 +11,7 @@ export class PrismaInspectionRepository implements InspectionRepositoryPort {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(data: NewInspection): Promise<InspectionModel> {
-    return this.toModel(await this.prisma.busInspection.create({ data }));
+    return this.toModel(await withPendingAudit(this.prisma, (db) => db.busInspection.create({ data })));
   }
 
   async findLatestByBus(busId: string): Promise<InspectionModel | null> {

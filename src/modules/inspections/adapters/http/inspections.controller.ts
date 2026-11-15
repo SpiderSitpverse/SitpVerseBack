@@ -12,7 +12,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { AuthenticatedUser, CurrentUser, Roles } from '../../../identity/public';
+import { Audited, AuthenticatedUser, CurrentUser, Roles } from '../../../identity/public';
 import {
   CreateInspectionUseCase,
   GetLatestInspectionUseCase,
@@ -48,6 +48,7 @@ export class InspectionsController {
 
   /** El conductor registra la inspección de su bus (el admin puede registrar la de cualquiera). */
   @Post()
+  @Audited('inspection.register', 'bus', 'body.busId')
   @Roles('DRIVER', 'ADMIN')
   register(@CurrentUser() user: AuthenticatedUser, @Body() body: CreateInspectionDto) {
     return this.create.execute(user, body);

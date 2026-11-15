@@ -1,0 +1,134 @@
+# Entorno de PRUEBA con la misma forma que producción (ESC-DISP-01, ESC-REND-01 y ESC-OBS-01):
+#   3 instancias del backend detrás de un balanceador + PostgreSQL y Redis compartidos + Prometheus y Grafana.
+#
+#   docker compose -f docker-compose.cluster.yml up -d --build
+#   docker compose -f docker-compose.cluster.yml down -v          # apagarlo y borrar sus datos
+#   API (balanceador)  http://localhost:8080      Prometheus  http://localhost:9090
+#   Grafana            http://localhost:3001      (usuario admin, clave GRAFANA_ADMIN_PASSWORD o "sitpverse-local")
+#
+# El inicio de sesión usa el "Google" falso de las pruebas (scripts/load-tests/fake-google.js): por eso las instancias NO
+# corren con NODE_ENV=production (en producción GOOGLE_JWKS_URI se rechaza).
+name: sitpverse-cluster # proyecto aparte: no toca el postgres/redis de desarrollo (docker-compose.yml)
+
+x-api: &api
+  image: sitpverse-back:cluster # la construye el servicio `migrate`
+  pull_policy: never
+  restart: "no"
+  # Cada instancia tiene medio núcleo (como una instancia pequeña de App Service). Así el límite lo pone la instancia y
+  # no la máquina de pruebas, que además corre la base de datos y el generador de carga.
+  cpus: ${API_CPUS:-0.5}
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+    redis:
+      condition: service_started
+    fake-google:
+      condition: service_started
+  environment: &api-env
+    PORT: 3000
+    DATABASE_URL: postgresql://sitpverse:sitpverse@postgres:5432/sitpverse?schema=public&connection_limit=10
+    REDIS_HOST: redis
+    REDIS_PORT: 6379
+    CORS_ORIGIN: http://localhost:5173
+    JWT_SECRET: cluster-local-secret-solo-para-pruebas-0123456789
+    GOOGLE_CLIENT_ID: sitpverse-test.apps.googleusercontent.com
+    GOOGLE_JWKS_URI: http://fake-google:4010/certs
+    FLEET_FEED_MODE: external
+    UPLOADS_DIR: /data/uploads
+  volumes:
+    - uploads:/data/uploads
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: sitpverse
+      POSTGRES_PASSWORD: sitpverse
+      POSTGRES_DB: sitpverse
+    command: ["postgres", "-c", "max_connections=100"]
+    ports:
+      - "5544:5432" # para las pruebas que miran la base directamente (DATABASE_URL=...localhost:5544...)
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sitpverse"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+
+  fake-google:
+    image: sitpverse-back:cluster
+    pull_policy: never
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    command: ["node", "scripts/load-tests/fake-google.js"]
+    environment:
+      FAKE_GOOGLE_HOST: 0.0.0.0
+    ports:
+      - "4010:4010"
+
+  # Migraciones + datos de prueba con la flota de hora pico (60 buses), una sola vez antes de arrancar las instancias.
+  migrate:
+    build: .
+    image: sitpverse-back:cluster
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://sitpverse:sitpverse@postgres:5432/sitpverse?schema=public
+      SEED_LOAD_BUSES: 60
+    command: ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && node dist/prisma/seed.js --reset"]
+
+  api-1:
+    <<: *api
+    environment:
+      <<: *api-env
+      INSTANCE_ID: api-1
+  api-2:
+    <<: *api
+    environment:
+      <<: *api-env
+      INSTANCE_ID: api-2
+  api-3:
+    <<: *api
+    environment:
+      <<: *api-env
+      INSTANCE_ID: api-3
+
+  # Balanceador: reparte entre las 3 instancias y, si una no responde, reintenta en otra y deja de enviarle tráfico.
+  lb:
+    image: nginx:1.27-alpine
+    depends_on: [api-1, api-2, api-3]
+    volumes:
+      - ./deploy/cluster/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "8080:80"
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    depends_on: [lb]
+    volumes:
+      - ./deploy/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    depends_on: [prometheus]
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-sitpverse-local}
+      GF_AUTH_ANONYMOUS_ENABLED: "false" # los tableros solo para quien inicia sesión
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/tecnico.json
+      PROMETHEUS_URL: http://prometheus:9090
+    volumes:
+      - ./deploy/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3001:3000"
+
+volumes:
+  uploads:

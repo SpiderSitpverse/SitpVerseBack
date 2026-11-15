@@ -42,6 +42,9 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   @WebSocketServer()
   server: Server;
 
+  /** Sockets identificados y abiertos en ESTA instancia (medidor `sitpverse_websocket_connections`). */
+  private readonly identified = new Set<string>();
+
   constructor(
     private readonly authenticate: AuthenticateTokenUseCase,
     private readonly outbox: OutboxReader,
@@ -60,7 +63,12 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
       }
       client.join([roleRoom(user.role), userRoom(user.id)]);
       this.metrics.increment('sitpverse_websocket_connections_total', { result: 'identified' });
-      client.emit(SOCKET_EVENTS.IDENTIFIED, { role: user.role, name: user.name });
+      this.identified.add(client.id);
+      this.metrics.setGauge('sitpverse_websocket_connections', this.identified.size);
+      // Sin `lastSeq` (primera conexión) se le dice por dónde va el flujo de alertas: es su punto de partida para
+      // pedir lo perdido si se desconecta (p. ej. si cae la instancia que lo atendía) antes de recibir un evento.
+      const seq = lastSeq === undefined ? await this.outbox.latestSeq(REDIS_STREAMS.ASSISTANCE) : undefined;
+      client.emit(SOCKET_EVENTS.IDENTIFIED, { role: user.role, name: user.name, ...(seq === undefined ? {} : { seq }) });
       this.logger.log(`Cliente ${client.id} identificado como ${user.role}`);
 
       if (lastSeq !== undefined) await this.replayMissed(client, user, lastSeq);
@@ -72,6 +80,8 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
 
   handleDisconnect(client: Socket) {
     this.metrics.increment('sitpverse_websocket_disconnects_total');
+    this.identified.delete(client.id);
+    this.metrics.setGauge('sitpverse_websocket_connections', this.identified.size);
     this.logger.log(`Cliente desconectado: ${client.id}`);
   }
 

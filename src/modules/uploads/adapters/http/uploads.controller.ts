@@ -1,7 +1,7 @@
 import { Controller, Inject, Post, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FILE_STORAGE, FileStoragePort } from '../../../../shared/domain/file-storage.port';
 import { SinglePhotoInterceptor, storeUploadedImage } from '../../../../shared/http/image-upload';
-import { Roles } from '../../../identity/public';
+import { Audited, Roles } from '../../../identity/public';
 
 /**
  * Subida general de fotos. El front sube cada foto aquí PRIMERO y luego envía las URLs devueltas
@@ -15,6 +15,7 @@ export class UploadsController {
   constructor(@Inject(FILE_STORAGE) private readonly storage: FileStoragePort) {}
 
   @Post('images')
+  @Audited('file.upload', 'file')
   @Roles('ADMIN', 'DRIVER', 'MECHANICAL')
   @UseInterceptors(SinglePhotoInterceptor())
   uploadImage(@UploadedFile() photo: Express.Multer.File | undefined) {

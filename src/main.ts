@@ -14,7 +14,7 @@ import {
   LocalFileStorage,
   UPLOADS_URL_PREFIX,
 } from './shared/infrastructure/storage/local-file-storage';
-import { TelemetryInterceptor } from './shared/infrastructure/telemetry.interceptor';
+import { MetricsService } from './shared/infrastructure/metrics.service';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -30,8 +30,8 @@ async function bootstrap() {
   // usuarios parecerían tener la IP del proxy y el límite de intentos de login los bloquearía a todos juntos.
   app.set('trust proxy', 1);
 
-  // Registro de cada petición (con trace_id, también en el header X-Trace-Id). Va antes de todo para verlas todas.
-  app.use(requestLogger(app.get<RequestSinkPort>(REQUEST_SINK)));
+  // Registro y métricas de cada petición (con trace_id, también en el header X-Trace-Id). Va antes de todo para verlas todas.
+  app.use(requestLogger(app.get<RequestSinkPort>(REQUEST_SINK), Date.now, app.get(MetricsService)));
 
   // Cabeceras de seguridad. `cross-origin` en recursos: el front vive en OTRO origen y pinta las fotos con <img>.
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
@@ -41,7 +41,6 @@ async function bootstrap() {
   });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.useGlobalFilters(new AppErrorFilter()); // errores de dominio → 400 / 401 / 403 / 404 / 409 / 429 / 503
-  app.useGlobalInterceptors(app.get(TelemetryInterceptor)); // métricas Prometheus por ruta (GET /metrics)
   app.useWebSocketAdapter(new RealtimeIoAdapter(app));
   app.enableShutdownHooks(); // cierra Prisma y Redis limpiamente con SIGTERM
 

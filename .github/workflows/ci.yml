@@ -109,6 +109,10 @@ jobs:
         run: npm run seed:reset && node scripts/load-tests/help-received.js
       - name: Resolución del incidente bajo concurrencia
         run: npm run seed:reset && node scripts/load-tests/resolution-concurrency.js
+      - name: Trazabilidad (cada acción crítica deja su registro, inspecciones inmutables, hoja de vida del bus)
+        run: npm run seed:reset && node scripts/load-tests/audit-trail.js
+      - name: Observabilidad y carga (salud, métricas y 100 posiciones simultáneas)
+        run: npm run seed:reset && node scripts/load-tests/quality.js
       - name: Seguridad (Google OIDC, solicitudes de acceso, límite por IP, auditoría inmutable)
         run: node scripts/load-tests/security.js
 

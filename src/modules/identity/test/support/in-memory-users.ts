@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { UserRole } from '../../../../shared/domain/roles';
 import { AuthenticatedUser } from '../../domain/models/authenticated-user';
-import { AuditEntry, AuditLogPort, AuditQuery, AuditRecord } from '../../domain/ports/audit-log.port';
+import { AuditEntry, AuditLogPort, AuditQuery, AuditRecord, PendingAudit } from '../../domain/ports/audit-log.port';
 import {
   NewUser,
   UserAdminRepositoryPort,
@@ -29,6 +29,14 @@ export class InMemoryAudit implements AuditLogPort {
   }
   push(entry: AuditEntry) {
     this.records.push({ ...entry, id: randomUUID(), at: new Date() });
+  }
+  prepare(entry: AuditEntry): PendingAudit {
+    return { id: randomUUID(), ...entry };
+  }
+  /** Igual que el adaptador real: el mismo registro pendiente no se guarda dos veces. */
+  async confirm(pending: PendingAudit): Promise<void> {
+    if (this.records.some((r) => r.id === pending.id)) return;
+    this.records.push({ ...(pending as unknown as AuditEntry), id: pending.id, at: new Date() });
   }
   async list(query: AuditQuery): Promise<AuditRecord[]> {
     return this.records
