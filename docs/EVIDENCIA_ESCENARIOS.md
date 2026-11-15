@@ -84,13 +84,20 @@ conexiones WebSocket, y esas se recuperan solas con `lastSeq`.
 - Cuenta no registrada o desactivada → **403 con el mismo mensaje** (no revela quién trabaja en la empresa). La cuenta
   no registrada deja además una **solicitud de acceso** que el administrador aprueba o rechaza.
 - **Límite por IP en Redis**: más de 10 intentos por minuto → 429 con `Retry-After`.
+- **Límite por usuario en toda la API** (600 por minuto, 20 por minuto para subir fotos), con contadores en Redis
+  compartidos entre las instancias: 429 con `Retry-After`. Un cliente abusivo o con errores no degrada a los demás.
 - Guard **global**: toda ruta HTTP y toda conexión WebSocket exige el JWT de sesión.
 
 **Cómo se verifica.** `npm run loadtest:security` firma ID tokens con una llave de prueba (un «Google» falso), así los
 casos inválidos se prueban sin depender de Google: token alterado, vencido, de otra aplicación, de otro emisor, correo
 sin verificar, `nonce` repetido, cuenta no registrada, desactivada, sin JWT, JWT vencido, 11 intentos seguidos…
 
-**Resultado** (`docs/evidencia/local-ESC-SEG-01-autenticacion.txt`): 87 de 87 comprobaciones.
+**Resultado** (`docs/evidencia/local-ESC-SEG-01-autenticacion.txt`): 87 de 87 comprobaciones. El límite por usuario se
+probó contra un servidor real con tope de 30 por minuto: de 40 peticiones, 30 respondieron 200 y 10 respondieron 429
+(`Retry-After: 60`); otro usuario no se vio afectado y `/health/live` siguió libre.
+
+Cambio respecto al escenario escrito (cuenta no registrada → `PENDING_APPROVAL` con solicitud de acceso): ver
+`docs/AVISO_PROFESOR.md`.
 
 ---
 
