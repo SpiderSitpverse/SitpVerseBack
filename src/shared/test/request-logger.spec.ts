@@ -191,3 +191,26 @@ describe('Métricas HTTP por ruta (ESC-OBS-01)', () => {
     expect(measure({ originalUrl: '/uploads/a.jpg' }, 200).counts).toHaveLength(0);
   });
 });
+
+describe('Cabecera X-Instance-Id (así se ve el balanceo)', () => {
+  function withInstance(instanceId?: string) {
+    const headers: Record<string, string> = {};
+    const res = Object.assign(new EventEmitter(), { statusCode: 200, setHeader: (k: string, v: string) => void (headers[k] = v) });
+    const spies = (['log', 'warn', 'error'] as const).map((level) => jest.spyOn(Logger.prototype, level).mockImplementation(() => undefined));
+    requestLogger(undefined, () => 0, { instanceId, increment: () => undefined, observe: () => undefined })(
+      { method: 'GET', originalUrl: '/x', ip: '1.2.3.4', header: () => undefined } as never,
+      res as never,
+      () => undefined,
+    );
+    spies.forEach((spy) => spy.mockRestore());
+    return headers;
+  }
+
+  it('cada respuesta dice qué instancia la atendió', () => {
+    expect(withInstance('d8ce030d10a8')['X-Instance-Id']).toBe('d8ce030d10a8');
+  });
+
+  it('sin identificador no se manda el header', () => {
+    expect(withInstance(undefined)['X-Instance-Id']).toBeUndefined();
+  });
+});
