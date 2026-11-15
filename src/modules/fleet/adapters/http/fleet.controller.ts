@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
-import { AuthenticatedUser, CurrentUser, Roles } from '../../../identity/public';
+import { Audited, AuthenticatedUser, CurrentUser, Roles } from '../../../identity/public';
 import { BusAccessService } from '../../application/services/bus-access.service';
 import { ListBusesUseCase } from '../../application/use-cases/list-buses.use-case';
 import { GetBusDetailUseCase } from '../../application/use-cases/get-bus-detail.use-case';
@@ -52,6 +52,7 @@ export class FleetController {
 
   /** HU-49 (parte 1) */
   @Patch(':id/start-trip')
+  @Audited('trip.start', 'bus', 'params.id')
   @Roles('ADMIN', 'DRIVER')
   async start(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string) {
     await this.access.assertCanOperate(user, id);
@@ -69,12 +70,13 @@ export class FleetController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() body: UpdatePositionDto,
   ) {
-    await this.access.assertCanOperate(user, id);
-    return this.updatePosition.execute(id, body.latitude, body.longitude);
+    const bus = await this.access.assertCanOperate(user, id);
+    return this.updatePosition.execute(bus, body.latitude, body.longitude);
   }
 
   /** HU-51 */
   @Patch(':id/finish-trip')
+  @Audited('trip.finish', 'bus', 'params.id')
   @Roles('ADMIN', 'DRIVER')
   async finish(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string) {
     await this.access.assertCanOperate(user, id);
@@ -83,6 +85,7 @@ export class FleetController {
 
   /** Registro de flota: da de alta un bus nuevo. 409 si la placa ya existe. */
   @Post()
+  @Audited('bus.create', 'bus')
   @Roles('ADMIN')
   create(@Body() body: CreateBusDto) {
     return this.createBus.execute(body);
@@ -90,6 +93,7 @@ export class FleetController {
 
   /** Registro de flota: edita la ficha del bus (modelo, año, operador, capacidad, referencia). */
   @Patch(':id')
+  @Audited('bus.update', 'bus', 'params.id')
   @Roles('ADMIN')
   update(@Param('id', ParseUUIDPipe) id: string, @Body() body: UpdateBusDto) {
     return this.updateBus.execute(id, body);
@@ -97,6 +101,7 @@ export class FleetController {
 
   /** Asigna el conductor de un bus (`{ "driverId": "<id>" }`) o lo quita (`{ "driverId": null }`). */
   @Patch(':id/driver')
+  @Audited('bus.assign_driver', 'bus', 'params.id')
   @Roles('ADMIN')
   setDriver(@Param('id', ParseUUIDPipe) id: string, @Body() body: AssignDriverDto) {
     return this.assignDriver.execute(id, body.driverId ?? null);

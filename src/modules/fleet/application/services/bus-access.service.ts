@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { NotFoundError } from '../../../../shared/domain/errors';
+import { Bus } from '../../domain/entities/bus.entity';
 import {
   BUS_REPOSITORY,
   BusRepositoryPort,
@@ -23,8 +24,11 @@ export class BusAccessService {
     assertCanViewBus(actor, await this.load(busId));
   }
 
-  async assertCanOperate(actor: BusActor, busId: string): Promise<void> {
-    assertCanOperateBus(actor, await this.load(busId));
+  /** Devuelve el bus que leyó para autorizar, para que el llamador no tenga que consultarlo otra vez. */
+  async assertCanOperate(actor: BusActor, busId: string): Promise<Bus> {
+    const bus = await this.load(busId);
+    assertCanOperateBus(actor, bus);
+    return bus;
   }
 
   private async load(busId: string) {

@@ -44,7 +44,12 @@ const LEVEL_OF = { ERROR: 'error', WARN: 'warn', INFO: 'log' } as const;
  * Seguridad: se registra la RUTA sin la query (podría traer datos) y NUNCA cabeceras (salvo el navegador) ni cuerpos: el token
  * de sesión viaja en `Authorization` y el ID token de Google en el cuerpo del login.
  */
-export function requestLogger(sink?: RequestSinkPort, now: () => number = Date.now) {
+export interface HttpMetricsPort {
+  increment(name: string, labels?: Record<string, string>): void;
+  observe(name: string, valueMs: number, labels?: Record<string, string>): void;
+}
+
+export function requestLogger(sink?: RequestSinkPort, now: () => number = Date.now, metrics?: HttpMetricsPort) {
   return (req: Request, res: Response, next: NextFunction) => {
     const incoming = req.header('x-trace-id');
     const traceId = incoming && SAFE_TRACE_ID.test(incoming) ? incoming : randomUUID();
@@ -58,6 +63,14 @@ export function requestLogger(sink?: RequestSinkPort, now: () => number = Date.n
 
     res.on('finish', () => {
       const path = req.originalUrl.split('?')[0];
+      const durationMs = now() - startedAt;
+      // Métricas por RUTA (la plantilla, `/fleet/buses/:id`, no la URL: así no hay una serie por cada bus). Se miden
+      // aquí, al terminar la respuesta: el código ya es el definitivo y entran también las rechazadas por el guard.
+      if (metrics && !path.startsWith('/uploads/')) {
+        const route = (req as Request & { route?: { path?: string } }).route?.path ?? 'unmatched';
+        metrics.observe('sitpverse_http_request_duration_ms', durationMs, { method: req.method, route });
+        metrics.increment('sitpverse_http_requests_total', { method: req.method, route, status: String(res.statusCode) });
+      }
       if (SKIPPED_PATHS.test(path)) return;
       const user = (req as Request & { user?: { id: string; role: string } }).user;
       const fields: RequestLogFields = {
@@ -66,7 +79,7 @@ export function requestLogger(sink?: RequestSinkPort, now: () => number = Date.n
         method: req.method,
         path,
         status: res.statusCode,
-        duration_ms: now() - startedAt,
+        duration_ms: durationMs,
         ip,
         country,
         user_agent: userAgent,

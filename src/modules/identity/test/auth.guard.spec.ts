@@ -4,6 +4,8 @@ import { Public, Roles } from '../adapters/http/auth.decorators';
 import { AuthGuard } from '../adapters/http/auth.guard';
 import { AuthenticateTokenUseCase } from '../application/authenticate-token.use-case';
 import { AuthenticatedUser } from '../domain/models/authenticated-user';
+import { Audited } from '../adapters/http/audited';
+import { InMemoryAudit } from './support/in-memory-users';
 
 const tokens: Record<string, AuthenticatedUser> = {
   'token-admin': { id: 'u1', employeeId: '1001', name: 'Admin', role: 'ADMIN', email: 'x@test.local', photoUrl: null },
@@ -12,6 +14,7 @@ const tokens: Record<string, AuthenticatedUser> = {
 
 class FakeController {
   @Roles('ADMIN') adminOnly() {}
+  @Roles('ADMIN') @Audited('tow.assign', 'incident', 'params.id') critical() {}
   @Roles('ADMIN', 'DRIVER') both() {}
   @Public() open() {}
   forgotten() {} // sin política
@@ -20,6 +23,8 @@ class FakeController {
 function context(handler: () => void, authorization?: string) {
   const request: Record<string, unknown> = {
     headers: authorization ? { authorization } : {},
+    method: 'POST',
+    params: { id: 'inc-1' },
   };
   const ctx = {
     getType: () => 'http',
@@ -30,11 +35,13 @@ function context(handler: () => void, authorization?: string) {
   return { ctx, request };
 }
 
+const audit = new InMemoryAudit();
 const guard = new AuthGuard(
   new Reflector(),
   {
     execute: async (token?: string) => (token ? tokens[token] ?? null : null),
   } as unknown as AuthenticateTokenUseCase,
+  audit,
 );
 const controller = new FakeController();
 
@@ -87,5 +94,36 @@ describe('AuthGuard global (falla cerrado)', () => {
     await expect(
       guard.canActivate(context(controller.forgotten, 'Bearer token-admin').ctx),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('intentar una acción crítica sin el rol necesario → 403 y queda en la auditoría como DENIED', async () => {
+    audit.records = [];
+    await expect(guard.canActivate(context(controller.critical, 'Bearer token-driver').ctx)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    expect(audit.records).toHaveLength(1);
+    expect(audit.records[0]).toMatchObject({
+      action: 'tow.assign',
+      outcome: 'DENIED',
+      actorId: 'u2',
+      actorRole: 'DRIVER',
+      resourceType: 'incident',
+      resourceId: 'inc-1',
+    });
+  });
+
+  it('un fallo al auditar el rechazo no lo convierte en un 500: sigue siendo 403', async () => {
+    audit.failNextWrite = true;
+    await expect(guard.canActivate(context(controller.critical, 'Bearer token-driver').ctx)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+  });
+
+  it('una ruta sin @Audited rechazada por rol no escribe auditoría', async () => {
+    audit.records = [];
+    await expect(guard.canActivate(context(controller.adminOnly, 'Bearer token-driver').ctx)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    expect(audit.records).toHaveLength(0);
   });
 });

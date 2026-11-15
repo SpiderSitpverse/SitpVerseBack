@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { AuditInterceptor } from './adapters/http/audit.interceptor';
 import { AccessRequestsController } from './adapters/http/access-requests.controller';
 import { AuditController } from './adapters/http/audit.controller';
 import { AuthController } from './adapters/http/auth.controller';
@@ -74,6 +75,7 @@ import { RedisLoginRateLimiter } from './infrastructure/security/redis-login-rat
     { provide: LOGIN_RATE_LIMITER, useClass: RedisLoginRateLimiter },
     { provide: TOKEN_SERVICE, useClass: JwtTokenService },
     { provide: APP_GUARD, useClass: AuthGuard },
+    { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
   ],
   exports: [AuthenticateTokenUseCase, FindActiveUserUseCase, AUDIT_LOG, REQUEST_SINK],
 })

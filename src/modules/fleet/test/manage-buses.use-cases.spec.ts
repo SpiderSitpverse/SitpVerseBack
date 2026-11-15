@@ -27,7 +27,7 @@ class InMemoryBuses implements BusRepositoryPort {
   async findById(id: string) { return this.rows.get(id) ?? null; }
   async findByDriverId(driverId: string) { return [...this.rows.values()].find((b) => b.driverId === driverId) ?? null; }
   async save() { /* no se usa aquí */ }
-  async appendPositionHistory() { /* no se usa aquí */ }
+  async savePosition() { /* no se usa aquí */ }
   async create(data: BusDetails & { plate: string; route: string }) {
     if ([...this.rows.values()].some((b) => b.plate === data.plate)) {
       throw new ConflictError('Ya existe un bus con esa placa', { reason: 'PLATE_TAKEN' });

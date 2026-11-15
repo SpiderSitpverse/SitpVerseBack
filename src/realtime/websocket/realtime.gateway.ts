@@ -42,6 +42,9 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   @WebSocketServer()
   server: Server;
 
+  /** Sockets identificados y abiertos en ESTA instancia (medidor `sitpverse_websocket_connections`). */
+  private readonly identified = new Set<string>();
+
   constructor(
     private readonly authenticate: AuthenticateTokenUseCase,
     private readonly outbox: OutboxReader,
@@ -60,6 +63,8 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
       }
       client.join([roleRoom(user.role), userRoom(user.id)]);
       this.metrics.increment('sitpverse_websocket_connections_total', { result: 'identified' });
+      this.identified.add(client.id);
+      this.metrics.setGauge('sitpverse_websocket_connections', this.identified.size);
       client.emit(SOCKET_EVENTS.IDENTIFIED, { role: user.role, name: user.name });
       this.logger.log(`Cliente ${client.id} identificado como ${user.role}`);
 
@@ -72,6 +77,8 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
 
   handleDisconnect(client: Socket) {
     this.metrics.increment('sitpverse_websocket_disconnects_total');
+    this.identified.delete(client.id);
+    this.metrics.setGauge('sitpverse_websocket_connections', this.identified.size);
     this.logger.log(`Cliente desconectado: ${client.id}`);
   }
 

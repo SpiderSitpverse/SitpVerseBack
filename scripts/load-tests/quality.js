@@ -10,7 +10,7 @@
 const { io } = require('socket.io-client');
 const fs = require('fs');
 const path = require('path');
-const { tokenFor } = require('./lib');
+const { tokenFor, makeClient, percentile } = require('./lib');
 
 const BASE = process.argv[2] ?? 'http://localhost:3000';
 const REQUESTS = Number(process.env.QUALITY_REQUESTS ?? 100);
@@ -18,25 +18,9 @@ const P95_LIMIT = Number(process.env.QUALITY_P95_MS ?? 500);
 let TOKEN;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const percentile = (values, p) => {
-  const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * p) - 1)] ?? 0;
-};
-const call = (method, path, authenticated, body) => {
-  const started = Date.now();
-  const headers = { 'Content-Type': 'application/json', 'x-trace-id': `quality-${Date.now()}` };
-  if (authenticated) headers.Authorization = `Bearer ${TOKEN}`;
-  return fetch(BASE + path, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  }).then(async (response) => {
-    const text = await response.text();
-    let body = text;
-    try { body = JSON.parse(text); } catch { /* Prometheus is plain text. */ }
-    return { status: response.status, body, durationMs: Date.now() - started };
-  });
-};
+const client = makeClient(BASE, Math.max(REQUESTS, 16));
+const call = (method, path, authenticated, body) =>
+  client.call(method, path, authenticated ? TOKEN : undefined, body, { 'x-trace-id': `quality-${Date.now()}` });
 
 /** Token de sesión guardado en `.quality-token` (ignorado por git) en la raíz del proyecto. */
 function readTokenFile() {
@@ -75,27 +59,33 @@ async function main() {
     transports: ['websocket'],
   });
   const eventLatencies = [];
+  const sentAtByLatitude = new Map();
   let received = 0;
   socket.on('fleet:position-updated', (event) => {
     if (event.busId !== bus.id) return;
     received += 1;
-    if (event.occurredAt) eventLatencies.push(Date.now() - Date.parse(event.occurredAt));
+    // Un solo reloj (el de esta máquina): desde que se ENVÍA la posición hasta que el mapa recibe el evento. Incluye la
+    // ida por HTTP, así que es una cota superior de la medida del escenario y no depende de relojes sincronizados.
+    const sentAt = sentAtByLatitude.get(Number(event.latitude).toFixed(5));
+    if (sentAt) eventLatencies.push(Date.now() - sentAt);
   });
   await new Promise((resolve, reject) => {
     socket.once('identified', resolve);
     socket.once('connect_error', reject);
   });
 
+  // Los clientes reales mantienen su conexión abierta: se abren antes de medir (no se mide el saludo TLS).
+  await client.warmUp(REQUESTS);
   const results = await Promise.all(
-    Array.from({ length: REQUESTS }, (_, index) =>
-      call('PATCH', `/fleet/buses/${bus.id}/position`, true, {
-        latitude: 4.6 + index / 100000,
-        longitude: -74.1 - index / 100000,
-      }),
-    ),
+    Array.from({ length: REQUESTS }, (_, index) => {
+      const latitude = Number((4.6 + index / 100000).toFixed(5));
+      sentAtByLatitude.set(latitude.toFixed(5), Date.now());
+      return call('PATCH', `/fleet/buses/${bus.id}/position`, true, { latitude, longitude: -74.1 - index / 100000 });
+    }),
   );
-  await sleep(500);
+  await sleep(1500);
   socket.close();
+  client.close();
 
   const httpLatencies = results.map((result) => result.durationMs);
   const successful = results.filter((result) => result.status === 200).length;
@@ -106,12 +96,13 @@ async function main() {
   check('HTTP p95 stays below threshold', p95Http <= P95_LIMIT, `p95=${p95Http}ms limit=${P95_LIMIT}ms`);
   check('Realtime p95 stays below threshold', p95Realtime <= P95_LIMIT, `p95=${p95Realtime}ms limit=${P95_LIMIT}ms`);
 
-  console.log(`\nHTTP p50=${percentile(httpLatencies, 0.5)}ms p95=${p95Http}ms`);
-  console.log(`Realtime samples=${eventLatencies.length} p50=${percentile(eventLatencies, 0.5)}ms p95=${p95Realtime}ms`);
+  console.log(`\nTarget: ${BASE}   concurrent requests: ${REQUESTS}   p95 limit: ${P95_LIMIT}ms`);
+  console.log(`HTTP      success=${successful}/${REQUESTS}  p50=${percentile(httpLatencies, 0.5)}ms p95=${p95Http}ms p99=${percentile(httpLatencies, 0.99)}ms`);
+  console.log(`Realtime  events=${received} samples=${eventLatencies.length}  p50=${percentile(eventLatencies, 0.5)}ms p95=${p95Realtime}ms p99=${percentile(eventLatencies, 0.99)}ms`);
   process.exit(checks.every(Boolean) ? 0 : 1);
 }
 
 main().catch((error) => {
-  console.error(`FAIL  Quality load test: ${error.message}`);
+  console.error(`FAIL  Quality load test: ${error.message}${error.cause ? ` (${error.cause.code ?? error.cause.message})` : ""}`);
   process.exit(1);
 });

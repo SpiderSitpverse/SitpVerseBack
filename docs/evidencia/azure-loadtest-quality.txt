@@ -1,0 +1,15 @@
+
+> sitpverse-back@0.1.0 loadtest:quality
+> node scripts/load-tests/quality.js https://sitpverse2026-api.azurewebsites.net
+
+PASS  Liveness endpoint
+PASS  Readiness endpoint
+PASS  Prometheus metrics endpoint
+PASS  Concurrent position updates preserve success success=100/100
+PASS  Realtime events are delivered received=100
+FAIL  HTTP p95 stays below threshold p95=2632ms limit=500ms
+FAIL  Realtime p95 stays below threshold p95=2631ms limit=500ms
+
+Target: https://sitpverse2026-api.azurewebsites.net   concurrent requests: 100   p95 limit: 500ms
+HTTP      success=100/100  p50=2256ms p95=2632ms p99=2651ms
+Realtime  events=100 samples=100  p50=2258ms p95=2631ms p99=2652ms

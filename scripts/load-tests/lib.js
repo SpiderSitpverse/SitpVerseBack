@@ -101,4 +101,61 @@ async function listen(base, employeeId, lastSeq) {
   return { socket, events, positions };
 }
 
-module.exports = { emailOf, fakeIp, getNonce, signIdToken, googleLogin, loginAs, tokenFor, makeApi, listen };
+/**
+ * Cliente HTTP con conexiones PERSISTENTES (keep-alive), como las de un cliente real: cada bus o navegador mantiene su
+ * conexión abierta y no paga el saludo TCP/TLS en cada petición. `fetch` abre una conexión nueva por cada petición
+ * simultánea, y contra un despliegue remoto eso mide el saludo TLS, no el sistema.
+ *
+ *   const client = makeClient(base, 100);
+ *   await client.warmUp(100);                       // abre las conexiones antes de medir
+ *   const r = await client.call('PATCH', '/fleet/buses/x/position', token, { latitude, longitude });
+ *   // r = { status, body, durationMs, headers }   (status 0 si la petición no llegó a completarse)
+ */
+function makeClient(base, maxSockets = 64) {
+  const url = new URL(base);
+  const transport = url.protocol === 'https:' ? require('https') : require('http');
+  const agent = new transport.Agent({ keepAlive: true, maxSockets, maxFreeSockets: maxSockets });
+
+  const call = (method, path, token, body, extraHeaders = {}) =>
+    new Promise((resolve) => {
+      const started = Date.now();
+      const payload = body === undefined ? undefined : JSON.stringify(body);
+      const headers = { Accept: 'application/json', ...extraHeaders };
+      if (payload !== undefined) {
+        headers['Content-Type'] = 'application/json';
+        headers['Content-Length'] = Buffer.byteLength(payload);
+      }
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const request = transport.request(
+        { protocol: url.protocol, hostname: url.hostname, port: url.port || undefined, path, method, agent, headers, timeout: 30_000 },
+        (response) => {
+          let text = '';
+          response.setEncoding('utf8');
+          response.on('data', (chunk) => (text += chunk));
+          response.on('end', () => {
+            let parsed = text;
+            try { parsed = JSON.parse(text); } catch { /* texto plano (p. ej. /metrics) */ }
+            resolve({ status: response.statusCode, body: parsed, durationMs: Date.now() - started, headers: response.headers });
+          });
+        },
+      );
+      request.on('timeout', () => request.destroy(new Error('timeout')));
+      request.on('error', (error) => resolve({ status: 0, body: { error: error.message }, durationMs: Date.now() - started, headers: {} }));
+      request.end(payload);
+    });
+
+  /** Abre `count` conexiones en paralelo (quedan abiertas) para que la medición no incluya el saludo TLS. */
+  const warmUp = (count) => Promise.all(Array.from({ length: count }, () => call('GET', '/health/live')));
+
+  return { call, warmUp, close: () => agent.destroy() };
+}
+
+/** Percentil `p` (0..1) de una lista de números; 0 si está vacía. */
+function percentile(values, p) {
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * p) - 1)] ?? 0;
+}
+
+module.exports = {
+  makeClient,
+  percentile, emailOf, fakeIp, getNonce, signIdToken, googleLogin, loginAs, tokenFor, makeApi, listen };

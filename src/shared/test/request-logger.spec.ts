@@ -149,3 +149,45 @@ describe('Registro de peticiones (ESC-OBS-01)', () => {
     });
   });
 });
+
+describe('Métricas HTTP por ruta (ESC-OBS-01)', () => {
+  function measure(req: Record<string, unknown>, status: number) {
+    const counts: [string, Record<string, string> | undefined][] = [];
+    const durations: [string, number, Record<string, string> | undefined][] = [];
+    const res = Object.assign(new EventEmitter(), { statusCode: status, setHeader: () => undefined });
+    const ticks = [1000, 1042];
+    const middleware = requestLogger(undefined, () => ticks.shift() ?? 0, {
+      increment: (name, labels) => void counts.push([name, labels]),
+      observe: (name, value, labels) => void durations.push([name, value, labels]),
+    });
+    const spies = (['log', 'warn', 'error'] as const).map((level) =>
+      jest.spyOn(Logger.prototype, level).mockImplementation(() => undefined),
+    );
+    middleware({ method: 'PATCH', ip: '1.2.3.4', header: () => undefined, ...req } as never, res as never, () => undefined);
+    res.emit('finish');
+    spies.forEach((spy) => spy.mockRestore());
+    return { counts, durations };
+  }
+
+  it('cuenta la petición por la PLANTILLA de la ruta (no por la URL) con el código definitivo y su duración', () => {
+    const { counts, durations } = measure(
+      { originalUrl: '/fleet/buses/8c1f/position?x=1', route: { path: '/fleet/buses/:id/position' } },
+      409,
+    );
+    expect(counts).toEqual([
+      ['sitpverse_http_requests_total', { method: 'PATCH', route: '/fleet/buses/:id/position', status: '409' }],
+    ]);
+    expect(durations).toEqual([
+      ['sitpverse_http_request_duration_ms', 42, { method: 'PATCH', route: '/fleet/buses/:id/position' }],
+    ]);
+  });
+
+  it('una URL que no corresponde a ninguna ruta se agrupa como "unmatched" (no crea una serie por URL)', () => {
+    const { counts } = measure({ originalUrl: '/wp-admin/setup.php' }, 404);
+    expect(counts[0][1]).toMatchObject({ route: 'unmatched', status: '404' });
+  });
+
+  it('las fotos no se miden', () => {
+    expect(measure({ originalUrl: '/uploads/a.jpg' }, 200).counts).toHaveLength(0);
+  });
+});

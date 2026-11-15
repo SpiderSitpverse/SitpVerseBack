@@ -1,8 +1,9 @@
+import { randomUUID } from 'crypto';
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { currentRequestContext } from '../../../../shared/http/client-info';
 import { PrismaService } from '../../../../shared/infrastructure/prisma.service';
-import { AuditEntry, AuditLogPort, AuditQuery, AuditRecord } from '../../domain/ports/audit-log.port';
+import { AuditEntry, AuditLogPort, AuditQuery, AuditRecord, PendingAudit } from '../../domain/ports/audit-log.port';
 
 /** Fila de `audit_log` a partir de una entrada. Compartido con los adaptadores que auditan dentro de su transacción. */
 export function auditData(entry: AuditEntry): Prisma.AuditLogUncheckedCreateInput {
@@ -32,6 +33,14 @@ export class PrismaAuditLog implements AuditLogPort {
 
   async record(entry: AuditEntry): Promise<void> {
     await this.prisma.auditLog.create({ data: auditData(entry) });
+  }
+
+  prepare(entry: AuditEntry): PendingAudit {
+    return { id: randomUUID(), ...auditData(entry) };
+  }
+
+  async confirm(pending: PendingAudit): Promise<void> {
+    await this.prisma.auditLog.createMany({ data: [pending as Prisma.AuditLogCreateManyInput], skipDuplicates: true });
   }
 
   async list(query: AuditQuery): Promise<AuditRecord[]> {

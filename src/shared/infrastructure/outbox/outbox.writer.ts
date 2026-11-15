@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { flushPendingAudit } from '../pending-audit';
 
 /** Mensaje destinado a un stream de Redis; `eventId` lo hace idempotente para el cliente. */
 export interface OutboxMessage {
@@ -20,6 +21,8 @@ export async function enqueueOutbox(
   messages: OutboxMessage[],
 ): Promise<void> {
   if (messages.length === 0) return;
+  // El cambio, su evento y su registro de auditoría se confirman juntos (ESC-SEG-03).
+  await flushPendingAudit(tx);
   await tx.outboxEvent.createMany({
     data: messages.map((m) => ({
       eventId: m.eventId,

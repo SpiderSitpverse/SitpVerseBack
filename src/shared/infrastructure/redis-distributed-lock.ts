@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import Redis from 'ioredis';
 import {
   DistributedLockPort,
@@ -7,6 +7,7 @@ import {
   LockTimeoutError,
 } from '../domain/distributed-lock.port';
 import { REDIS_PUBLISHER_CLIENT } from './redis.provider';
+import { MetricsService } from './metrics.service';
 import { logEvent } from './structured-log';
 
 /** Contención: esperar más de esto por un lock se registra como WARN. */
@@ -77,7 +78,10 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  */
 @Injectable()
 export class RedisDistributedLock implements DistributedLockPort {
-  constructor(@Inject(REDIS_PUBLISHER_CLIENT) private readonly redis: Redis) {}
+  constructor(
+    @Inject(REDIS_PUBLISHER_CLIENT) private readonly redis: Redis,
+    @Optional() private readonly metrics?: MetricsService,
+  ) {}
 
   async withLock<T>(
     key: string,
@@ -131,6 +135,10 @@ export class RedisDistributedLock implements DistributedLockPort {
     const waitedMs = acquiredAt - requestedAt;
     const heldMs = Date.now() - acquiredAt;
     const contended = waitedMs > CONTENTION_WARN_MS;
+    // La clave trae el id del recurso (`call:<uuid>`): la métrica se agrupa por TIPO de lock, no por recurso.
+    const kind = key.split(':')[0];
+    this.metrics?.observe('sitpverse_lock_wait_ms', waitedMs, { lock: kind });
+    this.metrics?.observe('sitpverse_lock_held_ms', heldMs, { lock: kind });
     logEvent(contended ? 'warn' : 'log', 'lock.released', {
       trace_id: traceId,
       lock: key,

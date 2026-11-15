@@ -14,7 +14,7 @@ import {
 import { FILE_STORAGE, FileStoragePort } from '../../../../shared/domain/file-storage.port';
 import { InvalidInputError } from '../../../../shared/domain/errors';
 import { SinglePhotoInterceptor, storeUploadedImage } from '../../../../shared/http/image-upload';
-import { AuthenticatedUser, CurrentUser, Roles } from '../../../identity/public';
+import { Audited, AuthenticatedUser, CurrentUser, Roles } from '../../../identity/public';
 import { AcceptCallUseCase } from '../../application/use-cases/accept-call.use-case';
 import { CancelClaimUseCase } from '../../application/use-cases/cancel-claim.use-case';
 import { CompleteCallUseCase } from '../../application/use-cases/complete-call.use-case';
@@ -66,6 +66,7 @@ export class AssistanceController {
 
   /** HU-16 — un conductor puede reportar un bloqueo y administración lo recibe en tiempo real. */
   @Post('blockages')
+  @Audited('blockage.report', 'bus', 'body.busId')
   @Roles('DRIVER', 'ADMIN')
   reportBlockage(@CurrentUser() user: AuthenticatedUser, @Body() body: CreateBlockageDto) {
     return this.routing.reportBlockage({ ...body, reportedById: user.id, reportedByName: user.name });
@@ -73,6 +74,7 @@ export class AssistanceController {
 
   /** HU-44 — administración reenvía el bloqueo a todos los conductores de la flota. */
   @Post('blockages/:id/alert')
+  @Audited('fleet_alert.send', 'incident', 'params.id')
   @Roles('ADMIN')
   alertFleet(@Param('id', ParseUUIDPipe) incidentId: string) {
     return this.routing.alertFleet(incidentId);
@@ -80,6 +82,7 @@ export class AssistanceController {
 
   /** HU-30 — asignar grúa y cuadrilla al incidente. */
   @Post('blockages/:id/tow')
+  @Audited('tow.assign', 'incident', 'params.id')
   @Roles('ADMIN')
   assignTow(
     @CurrentUser() user: AuthenticatedUser,
@@ -91,6 +94,7 @@ export class AssistanceController {
 
   /** HU-30/HU-50 — terminar el servicio de grúa: libera la grúa y la cuadrilla. */
   @Post('tow-assignments/:id/complete')
+  @Audited('tow.complete', 'tow_assignment', 'params.id')
   @Roles('ADMIN')
   completeTow(@Param('id', ParseUUIDPipe) assignmentId: string) {
     return this.routing.completeTow(assignmentId);
@@ -98,6 +102,7 @@ export class AssistanceController {
 
   /** HU-22 — adjuntar evidencia fotográfica al incidente. */
   @Post('incidents/:id/evidence')
+  @Audited('evidence.attach', 'incident', 'params.id')
   @Roles('DRIVER', 'ADMIN', 'MECHANICAL')
   attachEvidence(
     @CurrentUser() user: AuthenticatedUser,
@@ -113,6 +118,7 @@ export class AssistanceController {
    * Devuelve el registro de evidencia con su `url` relativa (p. ej. `/uploads/<id>.jpg`).
    */
   @Post('incidents/:id/evidence/upload')
+  @Audited('evidence.attach', 'incident', 'params.id')
   @Roles('DRIVER', 'ADMIN', 'MECHANICAL')
   @UseInterceptors(SinglePhotoInterceptor())
   async uploadEvidence(
@@ -159,6 +165,7 @@ export class AssistanceController {
 
   /** HU-47 — proponer una ruta alternativa desde el mapa. */
   @Post('incidents/:id/routes')
+  @Audited('route.create', 'incident', 'params.id')
   @Roles('ADMIN')
   proposeRoute(
     @CurrentUser() user: AuthenticatedUser,
@@ -170,6 +177,7 @@ export class AssistanceController {
 
   /** HU-47/HU-48 — asignar una ruta a un conductor desde el mapa. */
   @Post('routes/:routeId/assign')
+  @Audited('route.assign', 'route', 'params.routeId')
   @Roles('ADMIN')
   assignRoute(
     @Param('routeId', ParseUUIDPipe) routeId: string,
@@ -187,6 +195,7 @@ export class AssistanceController {
 
   /** HU-17/HU-52 — aceptar la ruta alternativa asignada. */
   @Post('routes/:routeId/accept')
+  @Audited('route.accept', 'route', 'params.routeId')
   @Roles('DRIVER')
   acceptRoute(@CurrentUser() user: AuthenticatedUser, @Param('routeId', ParseUUIDPipe) routeId: string) {
     return this.routing.acceptRoute(routeId, user.id);
@@ -194,6 +203,7 @@ export class AssistanceController {
 
   /** Uso 1 · paso 1: el conductor avisa a administración. */
   @Post('incidents')
+  @Audited('incident.report', 'bus', 'body.busId')
   @Roles('DRIVER')
   report(@CurrentUser() user: AuthenticatedUser, @Body() body: ReportIncidentDto) {
     return this.reportIncident.execute(user, body);
@@ -211,6 +221,7 @@ export class AssistanceController {
    * ruta asignada (se cancelan las aceptaciones, sin puntos); la grúa en servicio bloquea siempre.
    */
   @Delete('incidents/:id')
+  @Audited('incident.delete', 'incident', 'params.id')
   @Roles('ADMIN')
   removeIncident(@Param('id', ParseUUIDPipe) id: string, @Query('force') force?: string) {
     return this.deleteIncident.execute(id, { force: force === 'true' });
@@ -218,6 +229,7 @@ export class AssistanceController {
 
   /** Uso 1 · paso 2: el admin lanza la alerta a conductores (N cupos + recompensa). */
   @Post('incidents/:id/support-call')
+  @Audited('support_call.request', 'incident', 'params.id')
   @Roles('ADMIN')
   support(
     @CurrentUser() user: AuthenticatedUser,
@@ -229,6 +241,7 @@ export class AssistanceController {
 
   /** Uso 2: fallo de un bus → alerta a mecánicos (1 cupo). */
   @Post('bus-faults')
+  @Audited('bus_fault.report', 'bus', 'body.busId')
   @Roles('DRIVER', 'ADMIN')
   fault(@CurrentUser() user: AuthenticatedUser, @Body() body: BusFaultDto) {
     return this.reportFault.execute(user, body);
@@ -243,6 +256,7 @@ export class AssistanceController {
 
   /** Los primeros en llegar toman el cupo (409 si ya se llenó). */
   @Post('calls/:id/accept')
+  @Audited('call.accept', 'call', 'params.id')
   @Roles('DRIVER', 'MECHANICAL')
   accept(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.acceptCall.execute(user, id);
@@ -250,6 +264,7 @@ export class AssistanceController {
 
   /** El admin cancela una aceptación que no llegó a tiempo (libera el cupo). */
   @Post('calls/:id/claims/:claimId/cancel')
+  @Audited('claim.cancel', 'call', 'params.id')
   @Roles('ADMIN')
   cancel(
     @CurrentUser() user: AuthenticatedUser,
@@ -261,6 +276,7 @@ export class AssistanceController {
 
   /** El admin reenvía la alerta con los cupos libres. */
   @Post('calls/:id/resend')
+  @Audited('call.resend', 'call', 'params.id')
   @Roles('ADMIN')
   resend(@Param('id', ParseUUIDPipe) id: string) {
     return this.resendCall.execute(id);
@@ -271,6 +287,7 @@ export class AssistanceController {
    * alerta de apoyo, el conductor que reportó el incidente ("atención recibida"); la política decide cada caso.
    */
   @Post('calls/:id/complete')
+  @Audited('call.complete', 'call', 'params.id')
   @Roles('ADMIN', 'MECHANICAL', 'DRIVER')
   complete(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.completeCall.execute(user, id);

@@ -9,6 +9,11 @@ export interface RequestContext {
   country: string | null;
   /** Navegador o aplicación (cabecera `User-Agent`), recortado. */
   userAgent: string | null;
+  /**
+   * Registro de auditoría PENDIENTE de la petición (rutas `@Audited`): la fila ya armada, con `id` fijo. Los adaptadores
+   * la insertan dentro de su transacción (ver `pending-audit.ts`).
+   */
+  audit?: { id: string } & Record<string, unknown>;
 }
 
 /**

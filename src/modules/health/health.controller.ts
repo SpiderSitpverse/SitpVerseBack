@@ -1,9 +1,20 @@
-import { Controller, Get, Header, Inject, ServiceUnavailableException } from '@nestjs/common';
+import { timingSafeEqual } from 'crypto';
+import {
+  Controller,
+  Get,
+  Header,
+  Headers,
+  Inject,
+  ServiceUnavailableException,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 import { MetricsService } from '../../shared/infrastructure/metrics.service';
 import { PrismaService } from '../../shared/infrastructure/prisma.service';
 import { REDIS_PUBLISHER_CLIENT } from '../../shared/infrastructure/redis.provider';
 import { Public } from '../identity/public';
+import { ClusterMetricsService } from './cluster-metrics.service';
 
 const CHECK_TIMEOUT_MS = 2_000;
 
@@ -90,18 +101,38 @@ export class HealthController {
 }
 
 /**
- * Métricas en formato Prometheus de ESTA instancia (latencia y total de peticiones por ruta, conexiones y eventos
- * WebSocket, latencia de entrega de eventos, comprobaciones de salud). Prometheus las recoge cada 15 s.
- * Pública a propósito, como `/health`: solo trae contadores, sin datos de personas.
+ * Métricas en formato Prometheus (ESC-OBS-01): las de TODAS las instancias vivas (cada serie con su etiqueta `instance`)
+ * más las del sistema (KPIs de negocio, outbox pendiente, buses sin señal, estado de PostgreSQL y Redis). Prometheus las
+ * recoge cada 10 s. Ver `ClusterMetricsService`.
+ *
+ * No pasa por el guard de sesión (Prometheus no es un usuario), pero si `METRICS_TOKEN` está definido exige
+ * `Authorization: Bearer <METRICS_TOKEN>`: así las métricas de producción solo las lee el Prometheus autorizado.
  */
 @Controller('metrics')
 export class MetricsController {
-  constructor(private readonly metrics: MetricsService) {}
+  private readonly token?: string;
+
+  constructor(
+    private readonly cluster: ClusterMetricsService,
+    config: ConfigService,
+  ) {
+    this.token = config.get<string>('METRICS_TOKEN') || undefined;
+  }
 
   @Get()
   @Public()
   @Header('Content-Type', 'text/plain; version=0.0.4; charset=utf-8')
-  render() {
-    return this.metrics.renderPrometheus();
+  render(@Headers('authorization') authorization?: string) {
+    if (this.token && !sameSecret(authorization ?? '', `Bearer ${this.token}`)) {
+      throw new UnauthorizedException('Métricas protegidas: falta el token');
+    }
+    return this.cluster.render();
   }
+}
+
+/** Comparación en tiempo constante (no revela por el tiempo de respuesta cuántos caracteres coinciden). */
+function sameSecret(given: string, expected: string): boolean {
+  const a = Buffer.from(given);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
 }

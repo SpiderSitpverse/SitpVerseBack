@@ -2,7 +2,7 @@ import { ServiceUnavailableException } from '@nestjs/common';
 import Redis from 'ioredis';
 import { PrismaService } from '../../../shared/infrastructure/prisma.service';
 import { MetricsService } from '../../../shared/infrastructure/metrics.service';
-import { HealthController, MetricsController } from '../health.controller';
+import { HealthController } from '../health.controller';
 
 let lastMetrics: MetricsService;
 
@@ -68,17 +68,5 @@ describe('GET /health/live y /health/ready', () => {
   it('ready no revela errores internos', async () => {
     const error = await build({ db: 'fail', redis: 'fail' }).ready().catch((e) => e);
     expect(JSON.stringify(error.getResponse())).not.toMatch(/caída|password|secret|Error/i);
-  });
-});
-
-describe('GET /metrics', () => {
-  it('devuelve las métricas en formato Prometheus', () => {
-    const metrics = new MetricsService();
-    metrics.increment('sitpverse_http_requests_total', { method: 'GET', route: '/x', status: '200' });
-    metrics.observe('sitpverse_http_request_duration_ms', 42, { method: 'GET', route: '/x' });
-    const text = new MetricsController(metrics).render();
-    expect(text).toContain('sitpverse_http_requests_total{method="GET",route="/x",status="200"} 1');
-    expect(text).toContain('sitpverse_http_request_duration_ms_bucket{le="50",method="GET",route="/x"} 1');
-    expect(text).toContain('sitpverse_http_request_duration_ms_count{method="GET",route="/x"} 1');
   });
 });
