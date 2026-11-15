@@ -23,3 +23,13 @@ TODO OK: ESC-REND-01 (ritmo sostenido)
   ~50 de PostgreSQL ("remaining connection slots are reserved"); el pool por instancia bajó de 10 a 6.
 - Una sola sesión de administrador mandando 20 pet/s supera el límite por usuario (600/min): por eso el límite se subió
   temporalmente para medir y se restauró. Los 60 conductores reales mandan 0,33 pet/s cada uno.
+
+### C. Posiciones agrupadas en lotes (250 ms) y límite del plan B1
+- Con lotes, el entorno de 3 instancias del repositorio cumple el escenario completo: punta a punta p95 294 ms / p99 337 ms
+  (incluye hasta 250 ms de espera del lote), HTTP p95 50 ms, 124 600 de 124 600 entregas (local-3-instancias-rendimiento.txt).
+- En Azure con 140 oyentes seguía degradándose y, además, apareció un límite distinto: PostgreSQL llegó a 45 de ~50 conexiones
+  y la API quedó en 503 hasta reiniciarla ("Timed out fetching a new connection from the connection pool"). El plan B1 y el
+  PostgreSQL Burstable B1ms no dan para el escenario completo; para demostrarlo en Azure hace falta un plan mayor
+  (la cuota de P1v3 en West US 3 está en 0) o un PostgreSQL con más conexiones.
+- Conclusión para la presentación: el escenario completo se demuestra en el entorno de 3 instancias; en Azure se muestra el
+  ritmo del escenario con pocos oyentes (A) y la salud, las métricas y las trazas.
