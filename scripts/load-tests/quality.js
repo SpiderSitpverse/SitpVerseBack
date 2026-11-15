@@ -22,14 +22,15 @@ const client = makeClient(BASE, Math.max(REQUESTS, 16));
 const call = (method, path, authenticated, body) =>
   client.call(method, path, authenticated ? TOKEN : undefined, body, { 'x-trace-id': `quality-${Date.now()}` });
 
-/** Token de sesión guardado en `.quality-token` (ignorado por git) en la raíz del proyecto. */
-function readTokenFile() {
+/** Un secreto guardado en un archivo de la raíz del proyecto, ignorado por git (`.quality-token`, `.metrics-token`). */
+function readSecretFile(name) {
   try {
-    return fs.readFileSync(path.join(__dirname, '..', '..', '.quality-token'), 'utf8').trim() || undefined;
+    return fs.readFileSync(path.join(__dirname, '..', '..', name), 'utf8').trim() || undefined;
   } catch {
     return undefined;
   }
 }
+const readTokenFile = () => readSecretFile('.quality-token');
 
 async function main() {
   TOKEN = process.env.QUALITY_TOKEN ?? readTokenFile() ?? (await tokenFor(BASE, '1001'));
@@ -43,17 +44,25 @@ async function main() {
   check('Liveness endpoint', live.status === 200);
   const ready = await call('GET', '/health/ready');
   check('Readiness endpoint', ready.status === 200 && ready.body.status === 'ok');
-  const metrics = await call('GET', '/metrics');
+  // Con METRICS_TOKEN definido en el servidor, /metrics exige ese token (QUALITY_METRICS_TOKEN o el archivo .metrics-token).
+  const metricsToken = process.env.QUALITY_METRICS_TOKEN ?? readSecretFile('.metrics-token');
+  const metrics = await client.call('GET', '/metrics', metricsToken);
   check(
     'Prometheus metrics endpoint',
     metrics.status === 200 && typeof metrics.body === 'string',
   );
 
   const buses = await call('GET', '/fleet/buses', true);
-  const bus = buses.body.find((candidate) => candidate.plate === 'TMX-001') ?? buses.body[0];
-  if (!bus) throw new Error('No seeded bus found');
-
-  await call('PATCH', `/fleet/buses/${bus.id}/start-trip`, true);
+  if (!Array.isArray(buses.body) || buses.body.length === 0) throw new Error('No seeded bus found');
+  // Las posiciones se reparten entre TODOS los buses, como en la operación real (cada bus manda la suya). Mandarlas
+  // todas al mismo bus mediría otra cosa: PostgreSQL bloquea la fila y las atiende una tras otra.
+  const fleet = buses.body.slice(0, Number(process.env.QUALITY_BUSES ?? 60));
+  const startedHere = [];
+  for (const bus of fleet) {
+    const started = await call('PATCH', `/fleet/buses/${bus.id}/start-trip`, true);
+    if (started.status === 200) startedHere.push(bus); // 409 = ya estaba en servicio: no se toca al terminar
+  }
+  const fleetIds = new Set(fleet.map((bus) => bus.id));
   const socket = io(`${BASE}/realtime`, {
     auth: { token: TOKEN },
     transports: ['websocket'],
@@ -62,7 +71,7 @@ async function main() {
   const sentAtByLatitude = new Map();
   let received = 0;
   socket.on('fleet:position-updated', (event) => {
-    if (event.busId !== bus.id) return;
+    if (!fleetIds.has(event.busId)) return;
     received += 1;
     // Un solo reloj (el de esta máquina): desde que se ENVÍA la posición hasta que el mapa recibe el evento. Incluye la
     // ida por HTTP, así que es una cota superior de la medida del escenario y no depende de relojes sincronizados.
@@ -80,11 +89,15 @@ async function main() {
     Array.from({ length: REQUESTS }, (_, index) => {
       const latitude = Number((4.6 + index / 100000).toFixed(5));
       sentAtByLatitude.set(latitude.toFixed(5), Date.now());
+      const bus = fleet[index % fleet.length];
       return call('PATCH', `/fleet/buses/${bus.id}/position`, true, { latitude, longitude: -74.1 - index / 100000 });
     }),
   );
   await sleep(1500);
   socket.close();
+  // Los buses que esta prueba puso en servicio vuelven a quedar como estaban.
+  for (const bus of startedHere) await call('PATCH', `/fleet/buses/${bus.id}/finish-trip`, true);
+  const metricsAfter = await client.call('GET', '/metrics', metricsToken);
   client.close();
 
   const httpLatencies = results.map((result) => result.durationMs);
@@ -96,7 +109,14 @@ async function main() {
   check('HTTP p95 stays below threshold', p95Http <= P95_LIMIT, `p95=${p95Http}ms limit=${P95_LIMIT}ms`);
   check('Realtime p95 stays below threshold', p95Realtime <= P95_LIMIT, `p95=${p95Realtime}ms limit=${P95_LIMIT}ms`);
 
+  if (typeof metricsAfter.body === 'string') {
+    const lines = metricsAfter.body.split('\n');
+    const instances = lines.filter((line) => line.startsWith('sitpverse_http_requests_total') && line.includes('/fleet/buses/:id/position') && line.includes('status="200"'));
+    console.log('\nMetrics after the test (GET /metrics):');
+    for (const line of [...lines.filter((l) => /^sitpverse_(instances|dependency_up)/.test(l)), ...instances]) console.log(`  ${line}`);
+  }
   console.log(`\nTarget: ${BASE}   concurrent requests: ${REQUESTS}   p95 limit: ${P95_LIMIT}ms`);
+  console.log(`Buses: ${fleet.length}`);
   console.log(`HTTP      success=${successful}/${REQUESTS}  p50=${percentile(httpLatencies, 0.5)}ms p95=${p95Http}ms p99=${percentile(httpLatencies, 0.99)}ms`);
   console.log(`Realtime  events=${received} samples=${eventLatencies.length}  p50=${percentile(eventLatencies, 0.5)}ms p95=${p95Realtime}ms p99=${percentile(eventLatencies, 0.99)}ms`);
   process.exit(checks.every(Boolean) ? 0 : 1);

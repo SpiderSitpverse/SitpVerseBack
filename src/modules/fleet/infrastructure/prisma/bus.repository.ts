@@ -119,9 +119,14 @@ export class PrismaBusRepository implements BusRepositoryPort {
 
   async savePosition(bus: Bus): Promise<void> {
     const props = bus.toPersistence();
-    // Una sola ida a la base: el UPDATE (con compare-and-set) y el INSERT del historial van en la misma sentencia,
-    // así que o se guardan los dos o ninguno.
-    const inserted = await this.prisma.$executeRaw`
+    // El UPDATE (con compare-and-set) y el INSERT del historial van en la MISMA sentencia: o se guardan los dos o ninguno.
+    //
+    // `synchronous_commit = off` solo para esta transacción: PostgreSQL confirma sin esperar a que el registro llegue
+    // al disco. Si el servidor se cayera justo entonces se perderían, como mucho, las posiciones de las últimas décimas
+    // de segundo (nunca se corrompe nada), y una posición es un dato efímero: la siguiente la reemplaza a los 3 s.
+    // A cambio, la fila del bus queda bloqueada mucho menos tiempo y las posiciones seguidas de un mismo bus no hacen
+    // cola. Las alertas, los cupos y la auditoría NO usan este camino: esos sí esperan al disco.
+    const moved = this.prisma.$executeRaw`
       WITH moved AS (
         UPDATE "buses"
            SET "latitude" = ${props.latitude}, "longitude" = ${props.longitude}, "updatedAt" = NOW()
@@ -130,6 +135,10 @@ export class PrismaBusRepository implements BusRepositoryPort {
       )
       INSERT INTO "bus_positions" ("id", "busId", "latitude", "longitude")
       SELECT gen_random_uuid()::text, "id", ${props.latitude}, ${props.longitude} FROM moved`;
+    const [, inserted] = await this.prisma.$transaction([
+      this.prisma.$executeRaw`SET LOCAL synchronous_commit = off`,
+      moved,
+    ]);
     if (inserted === 0) {
       throw new ConflictError(
         `El bus ${props.plate} cambió de estado mientras se procesaba la operación`,
