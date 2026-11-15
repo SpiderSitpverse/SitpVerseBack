@@ -38,7 +38,21 @@ function resourceIdOf(spec: AuditedSpec, request: AuditedRequest): string | null
   return typeof value === 'string' && value.length <= 64 ? value : null;
 }
 
-/** El registro de una llamada a una ruta `@Audited`. Nunca incluye el cuerpo (puede traer datos personales o fotos). */
+/**
+ * Del cuerpo solo se guardan los IDENTIFICADORES (`driverId`, `busId`, `incidentId`...): dicen sobre qué se actuó (a qué
+ * conductor se asignó el bus) sin copiar texto libre, datos personales ni fotos.
+ */
+function idsOf(body: Record<string, unknown> | undefined): Record<string, string | null> | undefined {
+  if (!body || typeof body !== 'object') return undefined;
+  const ids: Record<string, string | null> = {};
+  for (const [key, value] of Object.entries(body)) {
+    if (!/Id$/.test(key)) continue;
+    if (value === null || (typeof value === 'string' && value.length <= 64)) ids[key] = value;
+  }
+  return Object.keys(ids).length > 0 ? ids : undefined;
+}
+
+/** El registro de una llamada a una ruta `@Audited`. Del cuerpo solo guarda los identificadores (ver `idsOf`). */
 export function auditEntryOf(
   spec: AuditedSpec,
   request: AuditedRequest,
@@ -54,6 +68,12 @@ export function auditEntryOf(
     actorRole: user?.role ?? null,
     resourceType: spec.resourceType ?? null,
     resourceId: resourceIdOf(spec, request),
-    detail: { method: request.method, route: request.route?.path ?? null, params: request.params ?? {}, ...extra },
+    detail: {
+      method: request.method,
+      route: request.route?.path ?? null,
+      params: request.params ?? {},
+      ...(idsOf(request.body) ? { ids: idsOf(request.body) } : {}),
+      ...extra,
+    },
   };
 }

@@ -73,7 +73,8 @@ const BUSES = [
 async function wipe() {
   // Orden inverso a las dependencias (outbox y alertas → flota → usuarios)
   await prisma.outboxEvent.deleteMany();
-  await prisma.busInspection.deleteMany();
+  // bus_inspections es de solo inserción (rechaza DELETE fila por fila); TRUNCATE solo existe para limpiar las pruebas.
+  await prisma.$executeRawUnsafe('TRUNCATE TABLE "bus_inspections"');
   await prisma.repairReport.deleteMany();
   await prisma.rewardEntry.deleteMany();
   await prisma.assistanceClaim.deleteMany();
