@@ -1,0 +1,33 @@
+flowchart TB
+  subgraph Cliente
+    front["Front React (Static Web Apps)<br/>mapa Leaflet, stores, Socket.IO client"]
+  end
+  subgraph Backend["Backend NestJS (×3 instancias)"]
+    direction TB
+    guard["Guards globales<br/>AuthGuard · ApiRateLimitGuard"]
+    mw["Middleware requestLogger<br/>trace_id · request_log · métricas HTTP"]
+    subgraph Modulos["Módulos (hexagonal)"]
+      identity["identity<br/>login Google · usuarios · auditoría"]
+      fleet["fleet<br/>buses · viajes · posición · hoja de vida"]
+      assistance["assistance<br/>incidentes · alertas · cupos · grúas · rutas"]
+      inspections["inspections"]
+      uploads["uploads"]
+      health["health<br/>/health · /metrics"]
+    end
+    realtime["Realtime<br/>Gateway Socket.IO · suscriptores Redis"]
+    shared["Shared<br/>Prisma · Redis · lock FIFO · outbox relay · métricas"]
+  end
+  pg[("PostgreSQL<br/>fuente de verdad")]
+  redis[("Redis<br/>lock · Pub/Sub · Streams · límites · métricas")]
+  google["Google (JWKS)"]
+  prom["Prometheus"]
+  graf["Grafana<br/>tablero técnico + negocio"]
+  front -- "HTTPS + JWT" --> mw --> guard --> Modulos
+  front <-- "WebSocket (token, lastSeq)" --> realtime
+  Modulos --> shared
+  realtime --> shared
+  identity -- "verifica ID token" --> google
+  shared --> pg
+  shared --> redis
+  prom -- "GET /metrics (Bearer)" --> health
+  graf --> prom

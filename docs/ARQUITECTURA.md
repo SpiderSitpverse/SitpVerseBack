@@ -2,8 +2,21 @@
 
 Team Spiderverse · Arquitecturas de Software 2026-2 · Escuela Colombiana de Ingeniería Julio Garavito
 
-Los diagramas están en [Mermaid](https://mermaid.js.org/): GitHub los dibuja directamente en este archivo, y se
-pueden exportar a imagen (https://mermaid.live) para el documento impreso.
+Los diagramas están en [Mermaid](https://mermaid.js.org/): GitHub los dibuja directamente en este archivo. Para el documento
+impreso hay una imagen de cada uno en [`docs/diagramas/`](diagramas/) (PNG a doble resolución y SVG, fondo blanco); se regeneran con
+`node scripts/evidence/render-diagrams.js`.
+
+| Diagrama | Imagen |
+|---|---|
+| 4.1 Contexto | `diagramas/01-contexto.png` |
+| 4.2 Componentes | `diagramas/02-componentes.png` |
+| 4.3 Clases | `diagramas/03-clases.png` |
+| 4.4 Entidad-relación | `diagramas/04-entidad-relacion.png` |
+| 4.5 Secuencia · inicio de sesión | `diagramas/05-secuencia-login-google.png` |
+| 4.6 Secuencia · posición GPS | `diagramas/06-secuencia-posicion-gps.png` |
+| 4.7 Secuencia · cupos concurrentes | `diagramas/07-secuencia-cupos-concurrentes.png` |
+| 4.8 Despliegue (obligatorio) | `diagramas/08-despliegue.png` |
+| 4.9 Actividades | `diagramas/09-actividades-bloqueo.png` |
 
 ## Índice
 
@@ -346,7 +359,7 @@ erDiagram
     enum status
     float latitude
     float longitude
-    uuid driverId FK_UK
+    uuid driverId FK, UK
   }
   BUS_POSITIONS {
     uuid id PK

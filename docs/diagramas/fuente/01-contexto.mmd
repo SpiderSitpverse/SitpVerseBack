@@ -1,0 +1,16 @@
+flowchart LR
+  admin["ADMIN<br/>(centro de control)"]
+  driver["DRIVER<br/>(conductor)"]
+  mech["MECHANICAL<br/>(mecánico)"]
+  ops["Operador técnico<br/>(DevOps)"]
+  sitp(["SitpVerse<br/>front + backend"])
+  google["Google<br/>(OpenID Connect)"]
+  tm["API de TransMilenio<br/>(futura fuente de posiciones)"]
+  sonar["SonarCloud"]
+  admin -- "mapa, alertas, usuarios, auditoría" --> sitp
+  driver -- "viaje, posición GPS, incidentes, inspección" --> sitp
+  mech -- "acepta reparaciones, informes" --> sitp
+  ops -- "tableros y métricas" --> sitp
+  sitp -- "valida ID token" --> google
+  tm -. "posiciones (futuro)" .-> sitp
+  sitp -- "análisis estático (CI)" --> sonar

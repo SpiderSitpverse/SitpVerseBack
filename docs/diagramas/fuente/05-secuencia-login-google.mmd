@@ -1,0 +1,25 @@
+sequenceDiagram
+  actor U as Persona
+  participant F as Front
+  participant G as Google
+  participant B as Backend (cualquier instancia)
+  participant R as Redis
+  participant P as PostgreSQL
+  F->>B: GET /auth/nonce
+  B->>R: guarda nonce (un solo uso)
+  B-->>F: nonce
+  U->>F: «Iniciar sesión con Google»
+  F->>G: authorization code + PKCE (scopes openid email profile)
+  G-->>F: ID token (JWT firmado por Google)
+  F->>B: POST /auth/google {idToken, nonce}
+  B->>R: límite por IP (10/min) y consume el nonce
+  B->>G: llaves públicas (JWKS, en caché)
+  B->>B: valida firma, iss, aud, exp, correo verificado
+  B->>P: busca usuario activo (sub o correo)
+  alt cuenta registrada y activa
+    B->>P: actualiza perfil + audit_log (misma transacción)
+    B-->>F: 200 JWT de sesión (8 h)
+  else no registrada o desactivada
+    B->>P: crea solicitud PENDING + audit_log
+    B-->>F: 403 (mismo mensaje en los dos casos)
+  end

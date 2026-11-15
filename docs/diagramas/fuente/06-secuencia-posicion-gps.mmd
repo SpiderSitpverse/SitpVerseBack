@@ -1,0 +1,19 @@
+sequenceDiagram
+  actor D as Conductor
+  participant LB as Balanceador
+  participant I1 as Instancia A
+  participant P as PostgreSQL
+  participant R as Redis (Pub/Sub)
+  participant I2 as Instancia B
+  actor A as Admin (mapa)
+  D->>LB: PATCH /fleet/buses/:id/position (JWT)
+  LB->>I1: reparte (sin afinidad)
+  I1->>I1: AuthGuard + límite + BusAccessService (solo su bus)
+  I1->>P: UPDATE bus + INSERT historial (una sentencia)
+  I1->>R: PUBLISH fleet:positions
+  I1-->>D: 200 (p95 ≈ 30 ms)
+  R-->>I1: evento
+  R-->>I2: evento
+  I1-->>A: emit fleet:position-updated (solo ADMIN y MECHANICAL)
+  I2-->>A: emit a sus sockets
+  Note over D,A: punta a punta p95 ≈ 36 ms

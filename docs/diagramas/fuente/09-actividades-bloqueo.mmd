@@ -1,0 +1,13 @@
+flowchart TD
+  s([Conductor reporta un bloqueo]) --> i[Se crea el incidente + evento en el outbox<br/>misma transacción]
+  i --> a{¿El admin avisa a la flota?}
+  a -- sí --> e[Evento blockage.alerted por Redis Stream]
+  e --> d[Cada instancia lo entrega a los 60 conductores<br/>con eventId y seq]
+  d --> r[Admin propone ruta alternativa]
+  r --> as[Admin asigna la ruta a un conductor]
+  as --> ac{¿El conductor acepta?}
+  ac -- sí --> ok[Ruta aceptada · audit_log]
+  ac -- no --> as
+  a -- no --> t[Admin asigna grúa o abre apoyo con cupos]
+  t --> f([Incidente resuelto])
+  ok --> f

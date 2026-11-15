@@ -1,0 +1,80 @@
+erDiagram
+  USERS ||--o| BUSES : "conduce"
+  USERS ||--o{ ASSISTANCE_CLAIMS : "acepta"
+  USERS ||--o{ REWARD_ENTRIES : "gana"
+  BUSES ||--o{ BUS_POSITIONS : "historial"
+  BUSES ||--o{ BUS_INSPECTIONS : "inspecciones (inmutables)"
+  BUSES ||--o{ DRIVER_INCIDENTS : "incidentes"
+  DRIVER_INCIDENTS ||--o{ ALTERNATIVE_ROUTES : "desvíos"
+  DRIVER_INCIDENTS ||--o{ TOW_ASSIGNMENTS : "grúas"
+  DRIVER_INCIDENTS ||--o{ INCIDENT_EVIDENCE : "fotos"
+  ASSISTANCE_CALLS ||--o{ ASSISTANCE_CLAIMS : "cupos"
+  ASSISTANCE_CALLS ||--o| REPAIR_REPORTS : "informe"
+  USERS {
+    uuid id PK
+    string employeeId UK
+    string email UK
+    string googleSub
+    enum role
+    bool active
+  }
+  BUSES {
+    uuid id PK
+    string plate UK
+    string route
+    enum status
+    float latitude
+    float longitude
+    uuid driverId FK, UK
+  }
+  BUS_POSITIONS {
+    uuid id PK
+    uuid busId FK
+    float latitude
+    float longitude
+    datetime recordedAt
+  }
+  ASSISTANCE_CALLS {
+    uuid id PK
+    enum kind
+    int slots
+    int claimedCount
+    enum status
+  }
+  ASSISTANCE_CLAIMS {
+    uuid id PK
+    uuid callId FK
+    uuid userId FK
+    enum status
+  }
+  OUTBOX_EVENTS {
+    bigint id PK
+    string eventId UK
+    string channel
+    json payload
+    datetime publishedAt
+  }
+  AUDIT_LOG {
+    uuid id PK
+    datetime at
+    uuid actorId
+    string action
+    string resourceId
+    string outcome
+    string ip
+    string country
+    string userAgent
+    string traceId
+  }
+  REQUEST_LOG {
+    bigint id PK
+    datetime at
+    string traceId
+    string method
+    string path
+    int status
+    string ip
+    string country
+    string userAgent
+    uuid userId
+  }

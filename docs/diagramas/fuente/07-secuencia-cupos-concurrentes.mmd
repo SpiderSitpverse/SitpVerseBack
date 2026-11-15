@@ -1,0 +1,18 @@
+sequenceDiagram
+  actor C as 12 conductores (a la vez)
+  participant I as Instancias del backend
+  participant L as Redis (lock FIFO)
+  participant P as PostgreSQL
+  participant O as Outbox → Redis Stream
+  C->>I: POST /assistance/calls/:id/accept (×12)
+  I->>L: toma turno (INCR atómico)
+  L-->>I: turnos en orden de llegada
+  loop en orden de llegada
+    I->>P: BEGIN · UPDATE claimedCount < slots · INSERT claim · INSERT outbox · audit_log · COMMIT
+    alt hay cupo (3 primeros)
+      P-->>I: ok → 201
+    else sin cupo (9 restantes)
+      P-->>I: 0 filas → 409
+    end
+  end
+  O-->>C: assistance:event (call.closed) a los demás conductores

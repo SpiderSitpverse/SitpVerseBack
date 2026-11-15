@@ -1,0 +1,56 @@
+classDiagram
+  class Bus {
+    +id: string
+    +plate: string
+    +route: string
+    +status: BusStatus
+    +latitude: number
+    +longitude: number
+    +updatedAt: Date
+    +expectedStatus: BusStatus
+    +startTrip()
+    +updatePosition(lat, lng)
+    +finishTrip()
+  }
+  class BusStatus {
+    <<enumeration>>
+    IDLE
+    IN_SERVICE
+    FINISHED
+  }
+  class BusRepositoryPort {
+    <<interface>>
+    +findById(id) Bus
+    +save(bus)
+    +savePosition(bus)
+    +assignDriver(busId, driverId)
+  }
+  class PositionPublisherPort {
+    <<interface>>
+    +publish(event BusPositionEvent)
+  }
+  class BusHistoryPort {
+    <<interface>>
+    +of(busId) BusHistory
+  }
+  class UpdateBusPositionUseCase {
+    +execute(bus, lat, lng)
+  }
+  class GetBusHistoryUseCase {
+    +execute(busId) BusHistory
+  }
+  class BusAccessService {
+    +assertCanView(actor, busId)
+    +assertCanOperate(actor, busId) Bus
+  }
+  class PrismaBusRepository
+  class RedisPositionPublisher
+  class PrismaBusHistory
+  Bus --> BusStatus
+  UpdateBusPositionUseCase --> BusRepositoryPort
+  UpdateBusPositionUseCase --> PositionPublisherPort
+  GetBusHistoryUseCase --> BusHistoryPort
+  BusAccessService --> BusRepositoryPort
+  BusRepositoryPort <|.. PrismaBusRepository
+  PositionPublisherPort <|.. RedisPositionPublisher
+  BusHistoryPort <|.. PrismaBusHistory

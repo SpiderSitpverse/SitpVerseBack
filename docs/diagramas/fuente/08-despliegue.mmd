@@ -1,0 +1,37 @@
+flowchart TB
+  subgraph Internet
+    users["Navegadores<br/>(admin, conductor, mecánico)"]
+    google["Google<br/>OpenID Connect"]
+  end
+  subgraph Azure["Azure · westus3 · grupo sitpverse2026-rg"]
+    swa["Static Web Apps<br/>Front React"]
+    subgraph asp["App Service plan B1 · 3 instancias · sin afinidad · health check /health"]
+      lb{{"Balanceador de App Service"}}
+      a1["Instancia 1<br/>NestJS"]
+      a2["Instancia 2<br/>NestJS"]
+      a3["Instancia 3<br/>NestJS"]
+      lb --> a1
+      lb --> a2
+      lb --> a3
+    end
+    pg[("Azure Database for PostgreSQL<br/>Flexible Server")]
+    redis[("Azure Managed Redis")]
+    subgraph aci["Azure Container Instances · host aparte"]
+      prom["Prometheus<br/>scrape cada 10 s"]
+      graf["Grafana<br/>usuario y clave"]
+    end
+    logs["Log Analytics / Log stream<br/>logs JSON con trace_id"]
+  end
+  subgraph gh["GitHub"]
+    actions["GitHub Actions<br/>CI + SonarCloud · deploy desde main"]
+  end
+  users -- "HTTPS" --> swa
+  users -- "HTTPS + WebSocket" --> lb
+  a1 & a2 & a3 --> pg
+  a1 & a2 & a3 --> redis
+  a1 & a2 & a3 -- "verifica ID token" --> google
+  prom -- "GET /metrics (Bearer)" --> lb
+  graf --> prom
+  a1 & a2 & a3 --> logs
+  actions -- "zip deploy" --> asp
+  actions -- "build" --> swa
