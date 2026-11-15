@@ -37,7 +37,7 @@ async function bootstrap() {
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
   app.enableCors({
     origin: config.get<string>('CORS_ORIGIN', '*').split(',').map((o) => o.trim()),
-    exposedHeaders: ['X-Trace-Id', 'Retry-After'], // el front puede leerlos (rastrear un error, cuenta regresiva del 429)
+    exposedHeaders: ['X-Trace-Id', 'X-Instance-Id', 'Retry-After'], // el front puede leerlos (rastrear un error, cuenta regresiva del 429)
   });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.useGlobalFilters(new AppErrorFilter()); // errores de dominio → 400 / 401 / 403 / 404 / 409 / 429 / 503

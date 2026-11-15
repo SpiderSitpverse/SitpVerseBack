@@ -170,6 +170,11 @@ async function attempt(token, { ip, nonce } = {}) {
   const retry = Number(limited.headers.get('retry-after'));
   check('Responde con Retry-After (≤ 60 s)', retry > 0 && retry <= 60, `(${retry}s)`);
   check('Otra IP no se ve afectada', (await attempt({})).status === 200);
+  // Detrás del balanceador de Azure la IP llega con el puerto de origen (que cambia en cada conexión): el límite debe seguir contándola.
+  const behindAzure = `10.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}.77`;
+  const withPorts = [];
+  for (let i = 0; i < 12; i++) withPorts.push((await attempt({ wrongKey: true }, { ip: `${behindAzure}:${50000 + i * 37}`, nonce: 'm'.repeat(24) })).status);
+  check('Con la IP llegando con puerto distinto en cada petición (como en Azure), el límite también se activa → 429', withPorts.includes(429), `(${withPorts})`);
   check('El mismo límite protege GET /auth/nonce', (await fetch(`${BASE}/auth/nonce`, { headers: { 'X-Forwarded-For': hammer } })).status === 429);
 
   section('5. ESC-SEG-01: rendimiento del inicio de sesión (p95 ≤ 300 ms)');

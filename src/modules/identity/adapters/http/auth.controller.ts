@@ -1,8 +1,9 @@
-import { Body, Controller, Get, HttpCode, Ip, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Post } from '@nestjs/common';
 import { IsString, Matches, MaxLength, MinLength } from 'class-validator';
 import { GoogleLoginUseCase } from '../../application/google-login.use-case';
 import { AuthenticatedUser } from '../../domain/models/authenticated-user';
 import { CurrentUser, Public, Roles } from './auth.decorators';
+import { ClientIp } from './client-ip.decorator';
 
 export class GoogleLoginDto {
   /** ID token (JWT firmado por Google) que entrega el inicio de sesión de Google en el front. */
@@ -21,7 +22,7 @@ export class AuthController {
    */
   @Get('nonce')
   @Public()
-  async nonce(@Ip() ip: string) {
+  async nonce(@ClientIp() ip: string) {
     return { nonce: await this.googleLogin.issueNonce(ip) };
   }
 
@@ -37,7 +38,7 @@ export class AuthController {
   @Post('google')
   @Public()
   @HttpCode(200)
-  signIn(@Body() body: GoogleLoginDto, @Ip() ip: string) {
+  signIn(@Body() body: GoogleLoginDto, @ClientIp() ip: string) {
     return this.googleLogin.execute(body.idToken, body.nonce, ip);
   }
 

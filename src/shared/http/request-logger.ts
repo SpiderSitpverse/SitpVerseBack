@@ -12,6 +12,7 @@ const SKIPPED_PATHS = /^\/(health|uploads\/)/;
 export type RequestLogFields = {
   event: 'http.request';
   trace_id: string;
+  instance?: string;
   method: string;
   path: string;
   status: number;
@@ -45,6 +46,8 @@ const LEVEL_OF = { ERROR: 'error', WARN: 'warn', INFO: 'log' } as const;
  * de sesión viaja en `Authorization` y el ID token de Google en el cuerpo del login.
  */
 export interface HttpMetricsPort {
+  /** Identificador de ESTA instancia del backend: sale en el header `X-Instance-Id` y en el log (así se ve el balanceo). */
+  readonly instanceId?: string;
   increment(name: string, labels?: Record<string, string>): void;
   observe(name: string, valueMs: number, labels?: Record<string, string>): void;
 }
@@ -54,6 +57,7 @@ export function requestLogger(sink?: RequestSinkPort, now: () => number = Date.n
     const incoming = req.header('x-trace-id');
     const traceId = incoming && SAFE_TRACE_ID.test(incoming) ? incoming : randomUUID();
     res.setHeader('X-Trace-Id', traceId);
+    if (metrics?.instanceId) res.setHeader('X-Instance-Id', metrics.instanceId);
     (req as Request & { traceId?: string }).traceId = traceId;
 
     const ip = normalizeIp(req.ip);
@@ -76,6 +80,7 @@ export function requestLogger(sink?: RequestSinkPort, now: () => number = Date.n
       const fields: RequestLogFields = {
         event: 'http.request',
         trace_id: traceId,
+        instance: metrics?.instanceId,
         method: req.method,
         path,
         status: res.statusCode,
