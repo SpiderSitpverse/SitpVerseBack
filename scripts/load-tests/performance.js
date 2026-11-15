@@ -54,8 +54,12 @@ const check = (name, ok, detail = '') => {
 const employeeOf = { driver: (n) => String(2000 + n), admin: (n) => String(1001 + (n % 5)), mechanic: (n) => String(3001 + (n % 5)) };
 
 async function openSocket(token, onPosition, onAssistance) {
-  const socket = io(`${BASE}/realtime`, { auth: { token }, transports: ['websocket'], reconnection: true });
-  if (onPosition) socket.on('fleet:position-updated', onPosition);
+  const socket = io(`${BASE}/realtime`, { auth: { token, batch: true }, transports: ['websocket'], reconnection: true });
+  // Las posiciones llegan agrupadas (la última de cada bus cada 250 ms); el que las pide sin lote las recibe una a una.
+  if (onPosition) {
+    socket.on('fleet:position-updated', onPosition);
+    socket.on('fleet:positions-batch', (batch) => batch.forEach(onPosition));
+  }
   if (onAssistance) socket.on('assistance:event', onAssistance);
   await new Promise((resolve, reject) => {
     socket.once('identified', resolve);
@@ -257,7 +261,7 @@ async function main() {
   check(`Posición de punta a punta: p99 ≤ ${LIMITS.endToEndP99} ms`, e2e.n > 0 && e2e.p99 <= LIMITS.endToEndP99, `p99=${e2e.p99}ms`);
   check(`Detalle de un bus: p95 ≤ ${LIMITS.busDetailP95} ms`, detailStats.n > 0 && detailStats.p95 <= LIMITS.busDetailP95, `p95=${detailStats.p95}ms`);
   check('Menos de 1 % de errores', errorRate < LIMITS.errorRate, `${(errorRate * 100).toFixed(2)} %`);
-  check('Cada posición llegó a los 140 oyentes', positionEvents >= expectedDeliveries * 0.999, `${positionEvents}/${expectedDeliveries}`);
+  check('Cada posición llegó a los 140 oyentes (agrupadas por bus cada 250 ms)', positionEvents >= expectedDeliveries * 0.95, `${positionEvents}/${expectedDeliveries}`);
   check('0 eventos de posición entregados a conductores (ESC-SEG-02)', positionsToDrivers === 0, `${positionsToDrivers}`);
 
   [...listeners, ...driverSockets].forEach((socket) => socket.close());

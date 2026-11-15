@@ -4,7 +4,8 @@ import {
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
-import { Logger } from '@nestjs/common';
+import { Logger, OnModuleDestroy } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Server, Socket } from 'socket.io';
 import {
   AudienceEvent,
@@ -21,6 +22,8 @@ import { MetricsService } from '../../shared/infrastructure/metrics.service';
 
 /** Quién ve el mapa de la flota en tiempo real: administración y mecánicos (el conductor no). */
 const FLEET_MAP_ROLES = ['ADMIN', 'MECHANICAL'];
+/** Sala de los sockets del mapa que piden las posiciones agrupadas (`auth: { batch: true }`). */
+const BATCH_ROOM = 'fleet:batch';
 
 /**
  * Único punto de salida WebSocket (namespace `/realtime`). Sin lógica de negocio:
@@ -36,7 +39,7 @@ const FLEET_MAP_ROLES = ['ADMIN', 'MECHANICAL'];
  * El CORS lo define RealtimeIoAdapter.
  */
 @WebSocketGateway({ namespace: 'realtime' })
-export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect, OnModuleDestroy {
   private readonly logger = new Logger(RealtimeGateway.name);
 
   @WebSocketServer()
@@ -45,11 +48,23 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   /** Sockets identificados y abiertos en ESTA instancia (medidor `sitpverse_websocket_connections`). */
   private readonly identified = new Set<string>();
 
+  /** Última posición de cada bus pendiente de enviar a los sockets que piden lotes. */
+  private readonly pendingPositions = new Map<string, BusPositionEvent>();
+  private flushTimer?: NodeJS.Timeout;
+  private readonly batchMs: number;
+
   constructor(
     private readonly authenticate: AuthenticateTokenUseCase,
     private readonly outbox: OutboxReader,
     private readonly metrics: MetricsService,
-  ) {}
+    config: ConfigService,
+  ) {
+    this.batchMs = Number(config.get('POSITION_BATCH_MS', 250));
+  }
+
+  onModuleDestroy() {
+    if (this.flushTimer) clearTimeout(this.flushTimer);
+  }
 
   async handleConnection(client: Socket) {
     const { token, lastSeq } = this.credentialsOf(client);
@@ -62,6 +77,7 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
         return;
       }
       client.join([roleRoom(user.role), userRoom(user.id)]);
+      if (client.handshake.auth?.batch === true && FLEET_MAP_ROLES.includes(user.role)) client.join(BATCH_ROOM);
       this.metrics.increment('sitpverse_websocket_connections_total', { result: 'identified' });
       this.identified.add(client.id);
       this.metrics.setGauge('sitpverse_websocket_connections', this.identified.size);
@@ -88,7 +104,23 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   broadcastPositionUpdate(event: BusPositionEvent) {
     this.metrics.increment('sitpverse_websocket_events_sent_total', { event: 'fleet_position' });
     this.observeEventLatency(event.updatedAt, 'fleet_position');
-    this.server.to(FLEET_MAP_ROLES.map(roleRoom)).emit(SOCKET_EVENTS.FLEET_POSITION, event);
+    // Los clientes que no piden lotes siguen recibiendo cada posición al instante (compatibilidad)...
+    this.server.to(FLEET_MAP_ROLES.map(roleRoom)).except(BATCH_ROOM).emit(SOCKET_EVENTS.FLEET_POSITION, event);
+    // ...y los que piden lotes reciben la ÚLTIMA posición de cada bus cada `batchMs`.
+    this.pendingPositions.set(event.busId, event);
+    this.flushTimer ??= setTimeout(() => this.flushPositions(), this.batchMs);
+    this.flushTimer.unref?.();
+  }
+
+  /** Envía a los sockets de lote las últimas posiciones acumuladas, en un solo mensaje. */
+  flushPositions() {
+    this.flushTimer = undefined;
+    if (this.pendingPositions.size === 0) return;
+    const batch = [...this.pendingPositions.values()];
+    this.pendingPositions.clear();
+    this.metrics.increment('sitpverse_websocket_events_sent_total', { event: 'fleet_positions_batch' });
+    this.metrics.observe('sitpverse_position_batch_size', batch.length, { unit: 'buses' });
+    this.server.to(BATCH_ROOM).emit(SOCKET_EVENTS.FLEET_POSITIONS_BATCH, batch);
   }
 
   broadcastToAudience(event: AudienceEvent) {

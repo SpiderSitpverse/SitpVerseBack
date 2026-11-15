@@ -253,6 +253,15 @@ con `bus_positions` precargada con una hora de historial.
 `docs/evidencia/azure-loadtest-quality.txt` tiene la salida de `npm run loadtest:quality` contra Azure: salud, métricas
 y 100 posiciones simultáneas repartidas entre las 3 instancias (se ve el reparto por instancia en las métricas).
 
+**Medición en Azure del ritmo del escenario** (`docs/evidencia/azure-ritmo-sostenido.txt`, `npm run loadtest:sustained`):
+20 posiciones por segundo durante 60 s con un administrador: respuesta HTTP p95 **172 ms** (meta 200) y punta a punta
+p95 **169 ms** (meta 500) con 10 oyentes del mapa, 0 % de errores. Con los **140 oyentes** completos el plan B1 (1 núcleo por
+instancia) se satura repartiendo 2 800 eventos por segundo; PostgreSQL y Redis no son el límite. Ese escenario completo se
+demuestra en el entorno de 3 instancias del repositorio (p95 de 36 ms), y para Azure las opciones son subir el plan de
+App Service (la cuota de P1v3 en West US 3 está en 0) o un PostgreSQL con más conexiones: las posiciones ya se agrupan en lotes de
+250 ms (con lotes el entorno de 3 instancias cumple con p95 de 294 ms), pero en Azure PostgreSQL B1ms llegó al tope de conexiones
+con 140 oyentes. **No hagas la prueba de 140 oyentes contra Azure en vivo**: deja la API en 503 hasta reiniciarla.
+
 La prueba completa de hora pico (60 conductores, 12 aceptaciones…) necesita 75 sesiones de usuarios distintos. En
 producción el único inicio de sesión es el de Google, que no se puede automatizar; por eso esa prueba corre en el
 entorno de 3 instancias del repositorio (con un «Google» de prueba) y en el CI, y en Azure se muestra en vivo con la
