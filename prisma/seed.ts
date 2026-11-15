@@ -118,6 +118,32 @@ async function main() {
     });
   }
 
+  // Flota de HORA PICO para las pruebas de carga (ESC-REND-01 y ESC-DISP-01): `SEED_LOAD_BUSES=60` completa hasta 60
+  // buses (TMX-006 a TMX-060), cada uno con su conductor (empleados 2006 a 2060). No se usa en producción.
+  const loadBuses = Number(process.env.SEED_LOAD_BUSES ?? 0);
+  for (let n = DRIVERS.length + 1; n <= loadBuses; n++) {
+    const employeeId = String(2000 + n);
+    const driver = await prisma.user.upsert({
+      where: { employeeId },
+      update: {},
+      create: { employeeId, name: `Conductor de carga ${n}`, role: 'DRIVER', email: emailOf(employeeId) },
+    });
+    const base = BUSES[n % BUSES.length];
+    const plate = `TMX-${String(n).padStart(3, '0')}`;
+    await prisma.bus.upsert({
+      where: { plate },
+      update: { driverId: driver.id },
+      create: {
+        ...base,
+        plate,
+        latitude: base.latitude + n / 1000,
+        longitude: base.longitude - n / 1000,
+        driverId: driver.id,
+      },
+    });
+  }
+  if (loadBuses > DRIVERS.length) console.log(`Flota de carga: ${loadBuses} buses con conductor (SEED_LOAD_BUSES).`);
+
   console.log(
     `Seed completado: ${ADMINS.length} ADMIN, ${DRIVERS.length} DRIVER y ${MECHANICS.length} MECHANICAL ` +
       `(entran con Google; el correo del 1001, 2001 y 3001 sale de SEED_*_EMAIL) y ${BUSES.length} buses con conductor asignado.`,

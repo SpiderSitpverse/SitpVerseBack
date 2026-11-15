@@ -1,0 +1,29 @@
+ESC-REND-01 contra http://localhost:8080: 60 conductores cada 3000 ms (20 pet/s), 140 oyentes, 60 s
+
+bus_positions precargada: 72000 filas (una hora pico)
+PASS  Los 60 buses quedan en servicio  (60/60)
+PASS  Conectados los 200 clientes (140 oyentes + 60 conductores)
+PASS  Alerta de bloqueo entregada a los 60 conductores (0 perdidas)  (60/60)
+PASS  Alerta de bloqueo: p95 ≤ 1000 ms  (n=60 p50=39ms p95=41ms p99=41ms max=41ms)
+PASS  12 aceptaciones sobre 3 cupos: exactamente 3 éxitos y 9 respuestas 409  (éxitos=3 409=9 otros=0)
+PASS  Aceptaciones: p95 ≤ 800 ms  (n=12 p50=124ms p95=205ms p99=205ms max=205ms)
+PASS  5 mecánicos sobre 1 reparación: exactamente 1 éxito  (éxitos=1 409=4)
+
+Posiciones enviadas: 1286 en 60 s (21.4 pet/s)   códigos: 200×1286
+Posición · respuesta HTTP        n=1286 p50=19ms p95=30ms p99=44ms max=107ms
+Posición · punta a punta (envío → mapa)   n=180040 p50=22ms p95=36ms p99=45ms max=127ms
+Posición · backend → mapa        n=180040 p50=11ms p95=20ms p99=27ms max=104ms   (misma máquina: un solo reloj)
+Eventos de posición recibidos por los 140 oyentes: 180040 de 180040 (100.00 %)
+Alerta de bloqueo → 60 conductores  n=60 p50=39ms p95=41ms p99=41ms max=41ms
+12 aceptaciones sobre 3 cupos       n=12 p50=124ms p95=205ms p99=205ms max=205ms
+Detalle de un bus (HU-13)           n=240 p50=12ms p95=22ms p99=37ms max=49ms
+
+PASS  Respuesta HTTP de la posición: p95 ≤ 200 ms  (p95=30ms)
+PASS  Posición de punta a punta: p95 ≤ 500 ms  (p95=36ms)
+PASS  Posición de punta a punta: p99 ≤ 1000 ms  (p99=45ms)
+PASS  Detalle de un bus: p95 ≤ 300 ms  (p95=22ms)
+PASS  Menos de 1 % de errores  (0.00 %)
+PASS  Cada posición llegó a los 140 oyentes  (180040/180040)
+PASS  0 eventos de posición entregados a conductores (ESC-SEG-02)  (0)
+
+TODO OK: ESC-REND-01 (rendimiento)

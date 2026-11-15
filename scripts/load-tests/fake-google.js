@@ -63,5 +63,5 @@ async function sign(spec) {
       }
       json(404, { error: 'no existe' });
     })
-    .listen(PORT, '127.0.0.1', () => console.log(`Google falso en http://127.0.0.1:${PORT} (aud=${DEFAULT_AUDIENCE})`));
+    .listen(PORT, process.env.FAKE_GOOGLE_HOST ?? '127.0.0.1', () => console.log(`Google falso en http://127.0.0.1:${PORT} (aud=${DEFAULT_AUDIENCE})`));
 })();

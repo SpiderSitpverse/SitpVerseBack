@@ -1,0 +1,10 @@
+node_modules
+dist
+coverage
+coverage-integration
+uploads
+.git
+.env
+.env.*
+.quality-token
+docs

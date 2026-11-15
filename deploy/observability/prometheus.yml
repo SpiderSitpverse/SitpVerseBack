@@ -1,0 +1,16 @@
+# Prometheus de SitpVerse (ESC-OBS-01). Recoge las métricas cada 10 s (el escenario pide 15 s o menos).
+#
+# El backend está detrás de un balanceador, así que Prometheus no puede preguntarle a cada instancia: `GET /metrics`
+# responde las de TODAS las instancias vivas, cada serie con su etiqueta `instance`. Por eso `honor_labels: true`
+# (se conserva esa etiqueta en vez de la del objetivo).
+global:
+  scrape_interval: 10s
+  scrape_timeout: 8s
+  evaluation_interval: 10s
+
+scrape_configs:
+  - job_name: sitpverse-api
+    metrics_path: /metrics
+    honor_labels: true
+    static_configs:
+      - targets: ['lb:80']

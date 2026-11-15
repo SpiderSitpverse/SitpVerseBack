@@ -65,7 +65,10 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
       this.metrics.increment('sitpverse_websocket_connections_total', { result: 'identified' });
       this.identified.add(client.id);
       this.metrics.setGauge('sitpverse_websocket_connections', this.identified.size);
-      client.emit(SOCKET_EVENTS.IDENTIFIED, { role: user.role, name: user.name });
+      // Sin `lastSeq` (primera conexión) se le dice por dónde va el flujo de alertas: es su punto de partida para
+      // pedir lo perdido si se desconecta (p. ej. si cae la instancia que lo atendía) antes de recibir un evento.
+      const seq = lastSeq === undefined ? await this.outbox.latestSeq(REDIS_STREAMS.ASSISTANCE) : undefined;
+      client.emit(SOCKET_EVENTS.IDENTIFIED, { role: user.role, name: user.name, ...(seq === undefined ? {} : { seq }) });
       this.logger.log(`Cliente ${client.id} identificado como ${user.role}`);
 
       if (lastSeq !== undefined) await this.replayMissed(client, user, lastSeq);

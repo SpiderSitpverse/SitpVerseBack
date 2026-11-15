@@ -1,0 +1,1121 @@
+{
+ "uid": "sitpverse-negocio",
+ "title": "SitpVerse · Tablero de negocio",
+ "description": "ESC-OBS-01: los cuatro KPIs del Inception (MTTR, efectividad de desvíos, disponibilidad de flota, asignaciones sin conflicto) y la operación del día.",
+ "tags": [
+  "sitpverse"
+ ],
+ "timezone": "browser",
+ "schemaVersion": 39,
+ "version": 1,
+ "refresh": "10s",
+ "time": {
+  "from": "now-15m",
+  "to": "now"
+ },
+ "editable": false,
+ "panels": [
+  {
+   "id": 32,
+   "type": "row",
+   "title": "KPIs del Inception",
+   "gridPos": {
+    "x": 0,
+    "y": 0,
+    "w": 24,
+    "h": 1
+   },
+   "collapsed": false
+  },
+  {
+   "id": 33,
+   "type": "stat",
+   "title": "MTTR (reporte de la falla → llega el auxilio)",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sitpverse_kpi_mttr_seconds",
+     "refId": "A",
+     "instant": true
+    }
+   ],
+   "gridPos": {
+    "x": 0,
+    "y": 1,
+    "w": 6,
+    "h": 5
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 900
+       },
+       {
+        "color": "red",
+        "value": 1800
+       }
+      ]
+     },
+     "decimals": 0,
+     "noValue": "sin alertas cerradas"
+    },
+    "overrides": []
+   },
+   "description": "Tiempo promedio desde que se lanza la alerta hasta que se confirma la atención. Meta: reducirlo 35 %.",
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "colorMode": "background",
+    "graphMode": "none",
+    "textMode": "auto"
+   }
+  },
+  {
+   "id": 34,
+   "type": "gauge",
+   "title": "Efectividad de desvíos (meta > 85 %)",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sitpverse_kpi_diversion_effectiveness_ratio",
+     "refId": "A",
+     "instant": true
+    }
+   ],
+   "gridPos": {
+    "x": 6,
+    "y": 1,
+    "w": 6,
+    "h": 5
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "min": 0,
+     "max": 1,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 0.7
+       },
+       {
+        "color": "green",
+        "value": 0.85
+       }
+      ]
+     },
+     "decimals": 1,
+     "noValue": "sin rutas asignadas"
+    },
+    "overrides": []
+   },
+   "description": "Rutas alternativas aceptadas sobre rutas asignadas.",
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "showThresholdMarkers": true
+   }
+  },
+  {
+   "id": 35,
+   "type": "gauge",
+   "title": "Disponibilidad efectiva de la flota (meta > 95 %)",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sitpverse_kpi_fleet_availability_ratio",
+     "refId": "A",
+     "instant": true
+    }
+   ],
+   "gridPos": {
+    "x": 12,
+    "y": 1,
+    "w": 6,
+    "h": 5
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "min": 0,
+     "max": 1,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 0.9
+       },
+       {
+        "color": "green",
+        "value": 0.95
+       }
+      ]
+     },
+     "decimals": 1
+    },
+    "overrides": []
+   },
+   "description": "Buses que no están esperando o en reparación, sobre el total.",
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "showThresholdMarkers": true
+   }
+  },
+  {
+   "id": 36,
+   "type": "gauge",
+   "title": "Asignaciones sin conflicto (meta 100 %)",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sitpverse_kpi_conflict_free_assignments_ratio",
+     "refId": "A",
+     "instant": true
+    }
+   ],
+   "gridPos": {
+    "x": 18,
+    "y": 1,
+    "w": 6,
+    "h": 5
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "min": 0,
+     "max": 1,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "green",
+        "value": 1
+       }
+      ]
+     },
+     "decimals": 1
+    },
+    "overrides": []
+   },
+   "description": "Alertas cuyos cupos aceptados no superan los cupos ofrecidos (0 sobreasignaciones).",
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "showThresholdMarkers": true
+   }
+  },
+  {
+   "id": 37,
+   "type": "row",
+   "title": "Operación",
+   "gridPos": {
+    "x": 0,
+    "y": 6,
+    "w": 24,
+    "h": 1
+   },
+   "collapsed": false
+  },
+  {
+   "id": 38,
+   "type": "stat",
+   "title": "Usuarios activos (últimos 5 min)",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sitpverse_active_users_5m",
+     "refId": "A",
+     "instant": true
+    }
+   ],
+   "gridPos": {
+    "x": 0,
+    "y": 7,
+    "w": 4,
+    "h": 4
+   },
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "colorMode": "value",
+    "graphMode": "area",
+    "textMode": "auto"
+   }
+  },
+  {
+   "id": 39,
+   "type": "stat",
+   "title": "Inicios de sesión con Google",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sitpverse_logins{outcome=\"success\"}",
+     "refId": "A",
+     "instant": true
+    }
+   ],
+   "gridPos": {
+    "x": 4,
+    "y": 7,
+    "w": 4,
+    "h": 4
+   },
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "auto"
+   }
+  },
+  {
+   "id": 40,
+   "type": "stat",
+   "title": "Inicios de sesión rechazados",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sitpverse_logins{outcome=\"rejected\"}",
+     "refId": "A",
+     "instant": true
+    }
+   ],
+   "gridPos": {
+    "x": 8,
+    "y": 7,
+    "w": 4,
+    "h": 4
+   },
+   "fieldConfig": {
+    "defaults": {
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 1
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "auto"
+   }
+  },
+  {
+   "id": 41,
+   "type": "stat",
+   "title": "Viajes iniciados",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sitpverse_trips{event=\"started\"}",
+     "refId": "A",
+     "instant": true
+    }
+   ],
+   "gridPos": {
+    "x": 12,
+    "y": 7,
+    "w": 3,
+    "h": 4
+   },
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "auto"
+   }
+  },
+  {
+   "id": 42,
+   "type": "stat",
+   "title": "Viajes finalizados",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sitpverse_trips{event=\"finished\"}",
+     "refId": "A",
+     "instant": true
+    }
+   ],
+   "gridPos": {
+    "x": 15,
+    "y": 7,
+    "w": 3,
+    "h": 4
+   },
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "auto"
+   }
+  },
+  {
+   "id": 43,
+   "type": "stat",
+   "title": "Buses en servicio",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sitpverse_buses_in_service",
+     "refId": "A",
+     "instant": true
+    }
+   ],
+   "gridPos": {
+    "x": 18,
+    "y": 7,
+    "w": 3,
+    "h": 4
+   },
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "auto"
+   }
+  },
+  {
+   "id": 44,
+   "type": "stat",
+   "title": "Buses sin señal",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sitpverse_buses_without_signal",
+     "refId": "A",
+     "instant": true
+    }
+   ],
+   "gridPos": {
+    "x": 21,
+    "y": 7,
+    "w": 3,
+    "h": 4
+   },
+   "fieldConfig": {
+    "defaults": {
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 1
+       },
+       {
+        "color": "red",
+        "value": 5
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "auto"
+   }
+  },
+  {
+   "id": 45,
+   "type": "stat",
+   "title": "Incidentes reportados",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sitpverse_incidents_reported",
+     "refId": "A",
+     "instant": true
+    }
+   ],
+   "gridPos": {
+    "x": 0,
+    "y": 11,
+    "w": 4,
+    "h": 4
+   },
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "auto"
+   }
+  },
+  {
+   "id": 46,
+   "type": "stat",
+   "title": "Incidentes abiertos",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sitpverse_incidents_open",
+     "refId": "A",
+     "instant": true
+    }
+   ],
+   "gridPos": {
+    "x": 4,
+    "y": 11,
+    "w": 4,
+    "h": 4
+   },
+   "fieldConfig": {
+    "defaults": {
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 1
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "auto"
+   }
+  },
+  {
+   "id": 47,
+   "type": "stat",
+   "title": "Alertas aceptadas",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sitpverse_alerts_accepted",
+     "refId": "A",
+     "instant": true
+    }
+   ],
+   "gridPos": {
+    "x": 8,
+    "y": 11,
+    "w": 4,
+    "h": 4
+   },
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "auto"
+   }
+  },
+  {
+   "id": 48,
+   "type": "stat",
+   "title": "Tiempo promedio de aceptación",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sitpverse_alert_accept_seconds_avg",
+     "refId": "A",
+     "instant": true
+    }
+   ],
+   "gridPos": {
+    "x": 12,
+    "y": 11,
+    "w": 4,
+    "h": 4
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s",
+     "decimals": 1,
+     "noValue": "sin aceptaciones"
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "auto"
+   }
+  },
+  {
+   "id": 49,
+   "type": "stat",
+   "title": "Grúas asignadas",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sitpverse_tows_assigned",
+     "refId": "A",
+     "instant": true
+    }
+   ],
+   "gridPos": {
+    "x": 16,
+    "y": 11,
+    "w": 4,
+    "h": 4
+   },
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "auto"
+   }
+  },
+  {
+   "id": 50,
+   "type": "stat",
+   "title": "Inspecciones registradas",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sitpverse_inspections_registered",
+     "refId": "A",
+     "instant": true
+    }
+   ],
+   "gridPos": {
+    "x": 20,
+    "y": 11,
+    "w": 4,
+    "h": 4
+   },
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "auto"
+   }
+  },
+  {
+   "id": 51,
+   "type": "row",
+   "title": "Tendencias",
+   "gridPos": {
+    "x": 0,
+    "y": 15,
+    "w": 24,
+    "h": 1
+   },
+   "collapsed": false
+  },
+  {
+   "id": 52,
+   "type": "timeseries",
+   "title": "Usuarios activos y buses en servicio",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sitpverse_active_users_5m",
+     "refId": "A",
+     "legendFormat": "usuarios activos (5 min)"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sitpverse_buses_in_service",
+     "refId": "B",
+     "legendFormat": "buses en servicio"
+    }
+   ],
+   "gridPos": {
+    "x": 0,
+    "y": 16,
+    "w": 12,
+    "h": 8
+   },
+   "fieldConfig": {
+    "defaults": {
+     "min": 0,
+     "decimals": 0,
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "showPoints": "never",
+      "spanNulls": true
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   }
+  },
+  {
+   "id": 53,
+   "type": "timeseries",
+   "title": "Viajes, incidentes y alertas (acumulado)",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sitpverse_trips{event=\"started\"}",
+     "refId": "A",
+     "legendFormat": "viajes iniciados"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sitpverse_trips{event=\"finished\"}",
+     "refId": "B",
+     "legendFormat": "viajes finalizados"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sitpverse_incidents_reported",
+     "refId": "C",
+     "legendFormat": "incidentes"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sitpverse_alerts_accepted",
+     "refId": "D",
+     "legendFormat": "alertas aceptadas"
+    }
+   ],
+   "gridPos": {
+    "x": 12,
+    "y": 16,
+    "w": 12,
+    "h": 8
+   },
+   "fieldConfig": {
+    "defaults": {
+     "min": 0,
+     "decimals": 0,
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "showPoints": "never",
+      "spanNulls": true
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   }
+  },
+  {
+   "id": 54,
+   "type": "timeseries",
+   "title": "KPIs en el tiempo",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sitpverse_kpi_fleet_availability_ratio",
+     "refId": "A",
+     "legendFormat": "disponibilidad de flota"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sitpverse_kpi_diversion_effectiveness_ratio",
+     "refId": "B",
+     "legendFormat": "efectividad de desvíos"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sitpverse_kpi_conflict_free_assignments_ratio",
+     "refId": "C",
+     "legendFormat": "asignaciones sin conflicto"
+    }
+   ],
+   "gridPos": {
+    "x": 0,
+    "y": 24,
+    "w": 12,
+    "h": 8
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "min": 0,
+     "max": 1,
+     "decimals": 1,
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "showPoints": "never",
+      "spanNulls": true
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   }
+  },
+  {
+   "id": 55,
+   "type": "bargauge",
+   "title": "Funcionalidades más usadas (última hora)",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "topk(10, sum by (method, route) (increase(sitpverse_http_requests_total{route!~\"/health.*|/metrics|unmatched\"}[1h])))",
+     "refId": "A",
+     "legendFormat": "{{method}} {{route}}",
+     "instant": true
+    }
+   ],
+   "gridPos": {
+    "x": 12,
+    "y": 24,
+    "w": 12,
+    "h": 8
+   },
+   "fieldConfig": {
+    "defaults": {
+     "decimals": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "orientation": "horizontal",
+    "displayMode": "gradient"
+   }
+  }
+ ]
+}

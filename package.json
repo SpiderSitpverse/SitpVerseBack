@@ -23,7 +23,13 @@
     "seed:prod": "node dist/prisma/seed.js",
     "loadtest:security": "node scripts/load-tests/security.js",
     "fake-google": "node scripts/load-tests/fake-google.js",
-    "loadtest:quality": "node scripts/load-tests/quality.js"
+    "loadtest:quality": "node scripts/load-tests/quality.js",
+    "loadtest:audit": "node scripts/load-tests/audit-trail.js",
+    "loadtest:performance": "node scripts/load-tests/performance.js",
+    "loadtest:availability": "node scripts/load-tests/availability.js",
+    "loadtest:scalability": "node scripts/load-tests/scalability.js",
+    "cluster:up": "docker compose -f docker-compose.cluster.yml up -d --build",
+    "cluster:down": "docker compose -f docker-compose.cluster.yml down -v"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.0",
