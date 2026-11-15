@@ -58,7 +58,7 @@ async function instancesAlive(client) {
 function openSocket(token, handlers = {}) {
   const state = { lastSeq: undefined, droppedAt: undefined, reconnects: [], connected: false, seen: new Set() };
   const socket = io(`${BASE}/realtime`, {
-    auth: (cb) => cb({ token, lastSeq: state.lastSeq }),
+    auth: (cb) => cb({ token, lastSeq: state.lastSeq, batch: true }),
     transports: ['websocket'],
     reconnection: true,
     reconnectionDelay: 500,
@@ -78,6 +78,7 @@ function openSocket(token, handlers = {}) {
     if (state.droppedAt === undefined) state.droppedAt = Date.now();
   });
   socket.on('fleet:position-updated', (event) => handlers.onPosition?.(event));
+  socket.on('fleet:positions-batch', (batch) => batch.forEach((event) => handlers.onPosition?.(event)));
   socket.on('assistance:event', (event) => {
     if (state.seen.has(event.eventId)) return; // entrega "al menos una vez": se descartan los repetidos
     state.seen.add(event.eventId);

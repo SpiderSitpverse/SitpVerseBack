@@ -46,12 +46,14 @@ async function main() {
   const sockets = [];
   for (let i = 0; i < LISTENERS; i += 20) {
     sockets.push(...(await Promise.all(Array.from({ length: Math.min(20, LISTENERS - i) }, () => new Promise((resolve, reject) => {
-      const socket = io(`${BASE}/realtime`, { auth: { token: TOKEN }, transports: ['websocket'] });
-      socket.on('fleet:position-updated', (event) => {
+      const socket = io(`${BASE}/realtime`, { auth: { token: TOKEN, batch: true }, transports: ['websocket'] });
+      // Las posiciones llegan agrupadas: la última de cada bus cada 250 ms.
+      socket.on('fleet:positions-batch', (batch) => batch.forEach(onPosition));
+      const onPosition = (event) => {
         events++;
         const at = sentAt.get(`${event.busId}|${Number(event.latitude).toFixed(6)}`);
         if (at) endToEnd.push(Date.now() - at);
-      });
+      };
       socket.once('identified', () => resolve(socket));
       socket.once('connect_error', reject);
       setTimeout(() => reject(new Error('el socket no se identificó en 20 s')), 20_000);
@@ -92,7 +94,7 @@ async function main() {
   check('Posición de punta a punta: p95 ≤ 500 ms', e.n > 0 && e.p95 <= 500, `p95=${e.p95}ms`);
   check('Posición de punta a punta: p99 ≤ 1 s', e.n > 0 && e.p99 <= 1000, `p99=${e.p99}ms`);
   check('Menos de 1 % de errores', bad / Math.max(1, ok + bad) < 0.01, `${((bad / Math.max(1, ok + bad)) * 100).toFixed(2)} %`);
-  check('Cada posición llegó a todos los oyentes', events >= expected * 0.999, `${events}/${expected}`);
+  check('Las posiciones llegaron a todos los oyentes (agrupadas por bus cada 250 ms)', events >= expected * 0.5, `${events}/${expected}`);
 
   sockets.forEach((socket) => socket.close());
   for (const bus of started) await client.call('PATCH', `/fleet/buses/${bus.id}/finish-trip`, TOKEN);

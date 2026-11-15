@@ -64,20 +64,21 @@ async function main() {
   }
   const fleetIds = new Set(fleet.map((bus) => bus.id));
   const socket = io(`${BASE}/realtime`, {
-    auth: { token: TOKEN },
+    auth: { token: TOKEN, batch: true },
     transports: ['websocket'],
   });
   const eventLatencies = [];
   const sentAtByLatitude = new Map();
   let received = 0;
-  socket.on('fleet:position-updated', (event) => {
+  const onPosition = (event) => {
     if (!fleetIds.has(event.busId)) return;
     received += 1;
     // Un solo reloj (el de esta máquina): desde que se ENVÍA la posición hasta que el mapa recibe el evento. Incluye la
     // ida por HTTP, así que es una cota superior de la medida del escenario y no depende de relojes sincronizados.
     const sentAt = sentAtByLatitude.get(Number(event.latitude).toFixed(5));
     if (sentAt) eventLatencies.push(Date.now() - sentAt);
-  });
+  };
+  socket.on('fleet:positions-batch', (batch) => batch.forEach(onPosition)); // la última posición de cada bus cada 250 ms
   await new Promise((resolve, reject) => {
     socket.once('identified', resolve);
     socket.once('connect_error', reject);

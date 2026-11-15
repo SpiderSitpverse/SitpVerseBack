@@ -21,6 +21,12 @@ export const REDIS_STREAMS = {
 /** Nombres de evento que recibe el cliente por Socket.io (namespace `/realtime`). */
 export const SOCKET_EVENTS = {
   FLEET_POSITION: 'fleet:position-updated',
+  /**
+   * Las posiciones de varios buses en UN solo mensaje: `BusPositionEvent[]`, la última de cada bus cada
+   * `POSITION_BATCH_MS` (250 ms por defecto). El cliente lo pide con `auth: { batch: true }`; con 60 buses y 140 mapas abiertos
+   * son unas 5 veces menos entregas que una por posición, y la posición es un dato efímero: la última de cada bus basta.
+   */
+  FLEET_POSITIONS_BATCH: 'fleet:positions-batch',
   ASSISTANCE: 'assistance:event',
   /** El servidor confirma que el socket quedó asociado a un usuario y a las salas de su rol. */
   IDENTIFIED: 'identified',
