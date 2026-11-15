@@ -33,6 +33,7 @@ x-api: &api
     JWT_SECRET: cluster-local-secret-solo-para-pruebas-0123456789
     GOOGLE_CLIENT_ID: sitpverse-test.apps.googleusercontent.com
     GOOGLE_JWKS_URI: http://fake-google:4010/certs
+    RATE_LIMIT_PER_MINUTE: 1000000 # las pruebas de carga superan el límite normal con pocos usuarios
     FLEET_FEED_MODE: external
     UPLOADS_DIR: /data/uploads
   volumes:

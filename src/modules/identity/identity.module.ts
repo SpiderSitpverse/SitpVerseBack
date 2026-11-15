@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { ApiRateLimitGuard } from './adapters/http/api-rate-limit.guard';
 import { AuditInterceptor } from './adapters/http/audit.interceptor';
 import { AccessRequestsController } from './adapters/http/access-requests.controller';
 import { AuditController } from './adapters/http/audit.controller';
@@ -21,6 +22,7 @@ import {
   UpdateUserUseCase,
 } from './application/manage-users.use-cases';
 import { ACCESS_REQUEST_REPOSITORY } from './domain/ports/access-request-repository.port';
+import { API_RATE_LIMITER } from './domain/ports/api-rate-limiter.port';
 import { AUDIT_LOG } from './domain/ports/audit-log.port';
 import { REQUEST_SINK } from '../../shared/domain/request-sink.port';
 import { REQUEST_LOG } from './domain/ports/request-log.port';
@@ -38,6 +40,7 @@ import { PrismaUserDirectory } from './infrastructure/prisma/prisma-user-directo
 import { GoogleIdTokenVerifier } from './infrastructure/security/google-id-token-verifier';
 import { JwtTokenService } from './infrastructure/security/jwt-token-service';
 import { RedisAuthNonceStore } from './infrastructure/security/redis-auth-nonce-store';
+import { RedisApiRateLimiter } from './infrastructure/security/redis-api-rate-limiter';
 import { RedisLoginRateLimiter } from './infrastructure/security/redis-login-rate-limiter';
 
 /**
@@ -75,6 +78,8 @@ import { RedisLoginRateLimiter } from './infrastructure/security/redis-login-rat
     { provide: LOGIN_RATE_LIMITER, useClass: RedisLoginRateLimiter },
     { provide: TOKEN_SERVICE, useClass: JwtTokenService },
     { provide: APP_GUARD, useClass: AuthGuard },
+    { provide: APP_GUARD, useClass: ApiRateLimitGuard }, // después del AuthGuard: ya sabe quién es
+    { provide: API_RATE_LIMITER, useClass: RedisApiRateLimiter },
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
   ],
   exports: [AuthenticateTokenUseCase, FindActiveUserUseCase, AUDIT_LOG, REQUEST_SINK],
