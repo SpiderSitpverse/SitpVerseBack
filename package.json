@@ -28,7 +28,6 @@
     "loadtest:performance": "node scripts/load-tests/performance.js",
     "loadtest:availability": "node scripts/load-tests/availability.js",
     "loadtest:scalability": "node scripts/load-tests/scalability.js",
-    "loadtest:sustained": "node scripts/load-tests/sustained.js",
     "cluster:up": "docker compose -f docker-compose.cluster.yml up -d --build",
     "cluster:down": "docker compose -f docker-compose.cluster.yml down -v"
   },
