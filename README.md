@@ -364,6 +364,7 @@ Prisma format: PASS
 ## Más documentación
 
 - [`docs/API.md`](docs/API.md): guía para conectar el front (endpoints por pantalla, tipos, WebSocket y fotos).
+- [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md): drivers, decisiones de diseño (ADR) y diagramas (contexto, componentes, clases, entidad-relación, secuencia, despliegue).
 - [`docs/DEPLOY.md`](docs/DEPLOY.md): despliegue en Azure paso a paso, con la configuración y cómo resolver fallos.
 
 Pruebas: `npm test` (unitarias y de arquitectura), `npm run loadtest` y `npm run loadtest:front|access|security|outbox`

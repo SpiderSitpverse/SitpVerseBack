@@ -2,8 +2,7 @@
 
 Team Spiderverse · Arquitecturas de Software 2026-2 · Escuela Colombiana de Ingeniería Julio Garavito
 
-Los diagramas están en [Mermaid](https://mermaid.js.org/): GitHub los dibuja directamente en este archivo, y se
-pueden exportar a imagen (https://mermaid.live) para el documento impreso.
+Los diagramas están en [Mermaid](https://mermaid.js.org/): GitHub los dibuja directamente en este archivo.
 
 ## Índice
 
@@ -346,7 +345,7 @@ erDiagram
     enum status
     float latitude
     float longitude
-    uuid driverId FK_UK
+    uuid driverId FK, UK
   }
   BUS_POSITIONS {
     uuid id PK
