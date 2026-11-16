@@ -20,7 +20,8 @@ export class PrismaRequestLog implements RequestSinkPort, RequestLogPort, OnModu
   private buffer: RequestRecord[] = [];
   private timer?: ReturnType<typeof setInterval>;
   private flushing: Promise<void> = Promise.resolve();
-
+  /** Hay un guardado automático (por llegar a FLUSH_AT) ya pedido: no se encolan más hasta que termine. */
+  private autoFlushPending = false;
   constructor(private readonly prisma: PrismaService) {}
 
   onModuleInit() {
@@ -33,11 +34,15 @@ export class PrismaRequestLog implements RequestSinkPort, RequestLogPort, OnModu
     await this.flush();
   }
 
-  push(record: RequestRecord): void {
-    this.buffer.push(record);
-    if (this.buffer.length > MAX_BUFFERED) this.buffer.splice(0, this.buffer.length - MAX_BUFFERED);
-    if (this.buffer.length >= FLUSH_AT) void this.flush();
-  }
+   push(record: RequestRecord): void {
+     this.buffer.push(record);
+     if (this.buffer.length > MAX_BUFFERED) this.buffer.splice(0, this.buffer.length - MAX_BUFFERED);
+     if (this.buffer.length >= FLUSH_AT && !this.autoFlushPending) {
+       // Sin esta guarda, con la base caída cada petición encolaba otro intento de guardar hasta 5000 filas.
+       this.autoFlushPending = true;
+       void this.flush().finally(() => { this.autoFlushPending = false; });
+     }
+   }
 
   /** Guarda lo pendiente. Un solo lote a la vez; si falla, el lote vuelve a la cola para el siguiente intento. */
   flush(): Promise<void> {
